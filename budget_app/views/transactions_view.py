@@ -2,10 +2,11 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QPushButton, QDialog, QFormLayout, QLineEdit, QDoubleSpinBox,
+    QPushButton, QDialog, QFormLayout, QLineEdit,
     QComboBox, QHeaderView, QMessageBox, QDateEdit, QLabel,
-    QCheckBox, QSpinBox, QGroupBox, QProgressBar, QApplication
+    QCheckBox, QGroupBox, QProgressBar, QApplication
 )
+from .widgets import NoScrollDoubleSpinBox, NoScrollSpinBox
 from PyQt6.QtCore import Qt, QDate, QThread, pyqtSignal
 from PyQt6.QtGui import QColor, QBrush, QCursor
 from datetime import datetime, timedelta, date
@@ -25,6 +26,9 @@ class TransactionsView(QWidget):
     def __init__(self):
         super().__init__()
         self._first_load = True
+        self._data_dirty = True  # Track if data needs reload
+        self._last_from_date = None
+        self._last_to_date = None
         self._setup_ui()
 
     def _setup_ui(self):
@@ -114,12 +118,31 @@ class TransactionsView(QWidget):
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.doubleClicked.connect(self._edit_transaction)
 
+    def mark_dirty(self):
+        """Mark data as dirty so next refresh reloads from database"""
+        self._data_dirty = True
+
     def refresh(self):
         """Refresh the table with transactions and running balances"""
         # On first load, auto-generate recurring transactions if none exist
         if self._first_load:
             self._first_load = False
             self._auto_generate_if_needed()
+            self._data_dirty = True  # Force load on first view
+
+        # Check if date range changed
+        current_from = self.from_date.date().toString("yyyy-MM-dd")
+        current_to = self.to_date.date().toString("yyyy-MM-dd")
+        dates_changed = (current_from != self._last_from_date or
+                        current_to != self._last_to_date)
+
+        # Skip refresh if data hasn't changed and dates are the same
+        if not self._data_dirty and not dates_changed:
+            return
+
+        self._last_from_date = current_from
+        self._last_to_date = current_to
+        self._data_dirty = False
 
         # Show loading state
         self.info_label.setText("Loading transactions...")
@@ -334,6 +357,7 @@ class TransactionsView(QWidget):
                 f"From {today} to {end_date}"
             )
 
+        self.mark_dirty()
         self.refresh()
 
     def _generate_special_charges(self, start_date: date, end_date: date,
@@ -511,6 +535,7 @@ class TransactionsView(QWidget):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             trans = dialog.get_transaction()
             trans.save()
+            self.mark_dirty()
             self.refresh()
 
     def _edit_transaction(self):
@@ -527,6 +552,7 @@ class TransactionsView(QWidget):
                 updated = dialog.get_transaction()
                 updated.id = trans.id
                 updated.save()
+                self.mark_dirty()
                 self.refresh()
 
     def _delete_transaction(self):
@@ -546,6 +572,7 @@ class TransactionsView(QWidget):
             )
             if reply == QMessageBox.StandardButton.Yes:
                 trans.delete()
+                self.mark_dirty()
                 self.refresh()
 
 
@@ -573,7 +600,7 @@ class GenerateRecurringDialog(QDialog):
         # Options
         form_layout = QFormLayout()
 
-        self.months_spin = QSpinBox()
+        self.months_spin = NoScrollSpinBox()
         self.months_spin.setRange(1, 24)
         self.months_spin.setValue(3)
         self.months_spin.setSuffix(" months")
@@ -641,7 +668,7 @@ class TransactionDialog(QDialog):
         self.desc_edit = QLineEdit()
         layout.addRow("Description:", self.desc_edit)
 
-        self.amount_spin = QDoubleSpinBox()
+        self.amount_spin = NoScrollDoubleSpinBox()
         self.amount_spin.setRange(-1000000, 1000000)
         self.amount_spin.setDecimals(2)
         self.amount_spin.setPrefix("$")

@@ -4,9 +4,9 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QFrame, QTableWidget, QTableWidgetItem,
     QHeaderView, QGroupBox, QProgressBar, QPushButton,
-    QDialog, QFormLayout, QDoubleSpinBox, QMessageBox,
-    QLineEdit
+    QDialog, QFormLayout, QMessageBox, QLineEdit
 )
+from .widgets import NoScrollDoubleSpinBox
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QColor
 from datetime import datetime, timedelta
@@ -234,18 +234,21 @@ class DashboardView(QWidget):
 
         self.min_balance_label.setText(f"${min_balance:,.2f}")
 
+        # Format date as MM/DD/YYYY for display
+        date_str = min_date.strftime("%m/%d/%Y") if min_date else None
+
         if min_balance < 0:
             self.min_balance_label.setStyleSheet("color: #f44336;")
-            self.min_date_label.setText(f"WARNING: Negative balance on {min_date}")
+            self.min_date_label.setText(f"WARNING: Negative balance on {date_str}")
             self.min_date_label.setStyleSheet("color: #f44336;")
         elif min_balance < 500:
             self.min_balance_label.setStyleSheet("color: #ff9800;")
-            self.min_date_label.setText(f"Low balance expected on {min_date}")
+            self.min_date_label.setText(f"Low balance expected on {date_str}")
             self.min_date_label.setStyleSheet("color: #ff9800;")
         else:
             self.min_balance_label.setStyleSheet("color: #4caf50;")
-            if min_date:
-                self.min_date_label.setText(f"Minimum occurs on {min_date}")
+            if date_str:
+                self.min_date_label.setText(f"Minimum occurs on {date_str}")
             else:
                 self.min_date_label.setText("Balance stays stable")
             self.min_date_label.setStyleSheet("color: #d4d4d4;")
@@ -350,7 +353,7 @@ class EditBalanceDialog(QDialog):
 
         layout.addRow(QLabel(f"Editing: {name}"))
 
-        self.balance_spin = QDoubleSpinBox()
+        self.balance_spin = NoScrollDoubleSpinBox()
         self.balance_spin.setRange(-1000000, 1000000)
         self.balance_spin.setDecimals(2)
         self.balance_spin.setPrefix("$")
@@ -402,12 +405,17 @@ class UpdateAllBalancesDialog(QDialog):
 
         self.account_spins = {}
         for account in Account.get_all():
-            spin = QDoubleSpinBox()
+            spin = NoScrollDoubleSpinBox()
             spin.setRange(-1000000, 1000000)
             spin.setDecimals(2)
-            spin.setPrefix("$")
             spin.setValue(account.current_balance)
-            accounts_layout.addRow(f"{account.name}:", spin)
+            # Create row with $ label
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.addWidget(QLabel("$"))
+            row_layout.addWidget(spin)
+            accounts_layout.addRow(f"{account.name}:", row_widget)
             self.account_spins[account.id] = spin
 
         layout.addWidget(accounts_group)
@@ -418,12 +426,17 @@ class UpdateAllBalancesDialog(QDialog):
 
         self.card_spins = {}
         for card in CreditCard.get_all():
-            spin = QDoubleSpinBox()
+            spin = NoScrollDoubleSpinBox()
             spin.setRange(0, 1000000)
             spin.setDecimals(2)
-            spin.setPrefix("$")
             spin.setValue(card.current_balance)
-            cards_layout.addRow(f"{card.name}:", spin)
+            # Create row with $ label
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.addWidget(QLabel("$"))
+            row_layout.addWidget(spin)
+            cards_layout.addRow(f"{card.name}:", row_widget)
             self.card_spins[card.id] = spin
 
         layout.addWidget(cards_group)
@@ -436,12 +449,17 @@ class UpdateAllBalancesDialog(QDialog):
 
             self.loan_spins = {}
             for loan in loans:
-                spin = QDoubleSpinBox()
+                spin = NoScrollDoubleSpinBox()
                 spin.setRange(0, 1000000)
                 spin.setDecimals(2)
-                spin.setPrefix("$")
                 spin.setValue(loan.current_balance)
-                loans_layout.addRow(f"{loan.name}:", spin)
+                # Create row with $ label
+                row_widget = QWidget()
+                row_layout = QHBoxLayout(row_widget)
+                row_layout.setContentsMargins(0, 0, 0, 0)
+                row_layout.addWidget(QLabel("$"))
+                row_layout.addWidget(spin)
+                loans_layout.addRow(f"{loan.name}:", row_widget)
                 self.loan_spins[loan.id] = spin
 
             layout.addWidget(loans_group)

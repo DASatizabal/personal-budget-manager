@@ -2,9 +2,10 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QPushButton, QDialog, QFormLayout, QLineEdit, QDoubleSpinBox,
-    QSpinBox, QComboBox, QHeaderView, QMessageBox, QLabel
+    QPushButton, QDialog, QFormLayout, QLineEdit,
+    QComboBox, QHeaderView, QMessageBox, QLabel
 )
+from .widgets import NoScrollDoubleSpinBox, NoScrollSpinBox
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 
@@ -208,25 +209,25 @@ class CreditCardDialog(QDialog):
         self.name_edit = QLineEdit()
         layout.addRow("Card Name:", self.name_edit)
 
-        self.limit_spin = QDoubleSpinBox()
+        self.limit_spin = NoScrollDoubleSpinBox()
         self.limit_spin.setRange(0, 1000000)
         self.limit_spin.setDecimals(2)
         self.limit_spin.setPrefix("$")
         layout.addRow("Credit Limit:", self.limit_spin)
 
-        self.balance_spin = QDoubleSpinBox()
+        self.balance_spin = NoScrollDoubleSpinBox()
         self.balance_spin.setRange(0, 1000000)
         self.balance_spin.setDecimals(2)
         self.balance_spin.setPrefix("$")
         layout.addRow("Current Balance:", self.balance_spin)
 
-        self.rate_spin = QDoubleSpinBox()
+        self.rate_spin = NoScrollDoubleSpinBox()
         self.rate_spin.setRange(0, 100)
         self.rate_spin.setDecimals(2)
         self.rate_spin.setSuffix("%")
         layout.addRow("Interest Rate:", self.rate_spin)
 
-        self.due_day_spin = QSpinBox()
+        self.due_day_spin = NoScrollSpinBox()
         self.due_day_spin.setRange(1, 31)
         layout.addRow("Due Day:", self.due_day_spin)
 
@@ -235,7 +236,7 @@ class CreditCardDialog(QDialog):
         self.min_type_combo.currentIndexChanged.connect(self._on_min_type_changed)
         layout.addRow("Min Payment Type:", self.min_type_combo)
 
-        self.min_amount_spin = QDoubleSpinBox()
+        self.min_amount_spin = NoScrollDoubleSpinBox()
         self.min_amount_spin.setRange(0, 100000)
         self.min_amount_spin.setDecimals(2)
         self.min_amount_spin.setPrefix("$")

@@ -2,10 +2,11 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QPushButton, QDialog, QFormLayout, QLineEdit, QDoubleSpinBox,
+    QPushButton, QDialog, QFormLayout, QLineEdit,
     QComboBox, QHeaderView, QMessageBox, QGroupBox, QLabel,
     QGridLayout, QRadioButton, QButtonGroup
 )
+from .widgets import NoScrollDoubleSpinBox
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
@@ -197,7 +198,7 @@ class SharedExpenseDialog(QDialog):
         self.name_edit = QLineEdit()
         layout.addRow("Name:", self.name_edit)
 
-        self.amount_spin = QDoubleSpinBox()
+        self.amount_spin = NoScrollDoubleSpinBox()
         self.amount_spin.setRange(0, 100000)
         self.amount_spin.setDecimals(2)
         self.amount_spin.setPrefix("$")
@@ -226,7 +227,7 @@ class SharedExpenseDialog(QDialog):
 
         layout.addRow("Split Type:", split_layout)
 
-        self.custom_spin = QDoubleSpinBox()
+        self.custom_spin = NoScrollDoubleSpinBox()
         self.custom_spin.setRange(0, 100)
         self.custom_spin.setDecimals(1)
         self.custom_spin.setSuffix("%")

@@ -2,10 +2,11 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QPushButton, QDialog, QFormLayout, QLineEdit, QDoubleSpinBox,
+    QPushButton, QDialog, QFormLayout, QLineEdit,
     QComboBox, QHeaderView, QMessageBox, QDateEdit, QLabel,
     QGroupBox, QGridLayout
 )
+from .widgets import NoScrollDoubleSpinBox
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QFont
 
@@ -236,7 +237,7 @@ class PaycheckConfigDialog(QDialog):
         """Set up the dialog UI"""
         layout = QFormLayout(self)
 
-        self.gross_spin = QDoubleSpinBox()
+        self.gross_spin = NoScrollDoubleSpinBox()
         self.gross_spin.setRange(0, 1000000)
         self.gross_spin.setDecimals(2)
         self.gross_spin.setPrefix("$")
@@ -311,13 +312,13 @@ class DeductionDialog(QDialog):
         self.type_combo.currentIndexChanged.connect(self._on_type_changed)
         layout.addRow("Type:", self.type_combo)
 
-        self.amount_spin = QDoubleSpinBox()
+        self.amount_spin = NoScrollDoubleSpinBox()
         self.amount_spin.setRange(0, 100000)
         self.amount_spin.setDecimals(2)
         self.amount_spin.setPrefix("$")
         layout.addRow("Amount:", self.amount_spin)
 
-        self.percent_spin = QDoubleSpinBox()
+        self.percent_spin = NoScrollDoubleSpinBox()
         self.percent_spin.setRange(0, 100)
         self.percent_spin.setDecimals(4)
         self.percent_spin.setSuffix("%")

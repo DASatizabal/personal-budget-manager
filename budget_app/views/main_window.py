@@ -312,7 +312,7 @@ class MainWindow(QMainWindow):
                 border: 1px solid #3c3c3c;
             }
             QTableWidget::item, QTableView::item {
-                padding: 4px;
+                padding: 6px 8px;
             }
             QTableWidget::item:selected, QTableView::item:selected {
                 background-color: #264f78;
@@ -320,17 +320,19 @@ class MainWindow(QMainWindow):
             QHeaderView::section {
                 background-color: #2d2d2d;
                 color: #d4d4d4;
-                padding: 6px;
+                padding: 8px 12px;
                 border: none;
                 border-right: 1px solid #3c3c3c;
                 border-bottom: 1px solid #3c3c3c;
+                font-weight: bold;
             }
             QPushButton {
                 background-color: #0e639c;
                 color: white;
                 border: none;
-                padding: 6px 16px;
+                padding: 8px 20px;
                 border-radius: 4px;
+                min-width: 80px;
             }
             QPushButton:hover {
                 background-color: #1177bb;
@@ -407,14 +409,22 @@ class MainWindow(QMainWindow):
             }
             QGroupBox {
                 border: 1px solid #3c3c3c;
-                border-radius: 4px;
-                margin-top: 8px;
-                padding-top: 8px;
+                border-radius: 6px;
+                margin-top: 12px;
+                padding: 16px 12px 12px 12px;
+                font-weight: bold;
             }
             QGroupBox::title {
                 color: #d4d4d4;
                 subcontrol-origin: margin;
-                left: 10px;
+                left: 12px;
+                padding: 0 4px;
+            }
+            QDialog {
+                background-color: #252526;
+            }
+            QFormLayout {
+                spacing: 12px;
             }
         """)
 

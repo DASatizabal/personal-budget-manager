@@ -2,9 +2,10 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QPushButton, QDialog, QFormLayout, QLineEdit, QDoubleSpinBox,
-    QSpinBox, QComboBox, QHeaderView, QMessageBox, QCheckBox
+    QPushButton, QDialog, QFormLayout, QLineEdit,
+    QComboBox, QHeaderView, QMessageBox, QCheckBox
 )
+from .widgets import NoScrollDoubleSpinBox, NoScrollSpinBox
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 
@@ -178,13 +179,13 @@ class RecurringChargeDialog(QDialog):
         self.name_edit = QLineEdit()
         layout.addRow("Name:", self.name_edit)
 
-        self.amount_spin = QDoubleSpinBox()
+        self.amount_spin = NoScrollDoubleSpinBox()
         self.amount_spin.setRange(-1000000, 1000000)
         self.amount_spin.setDecimals(2)
         self.amount_spin.setPrefix("$")
         layout.addRow("Amount (negative = expense):", self.amount_spin)
 
-        self.day_spin = QSpinBox()
+        self.day_spin = NoScrollSpinBox()
         self.day_spin.setRange(1, 999)
         self.day_spin.setSpecialValueText("1")
         layout.addRow("Day of Month (991-999 = special):", self.day_spin)
