@@ -17,3 +17,12 @@ Matches Excel projection behavior. Regeneration clears old future transactions f
 
 ## 2026-01-06: Exclude Excel and DB files from git
 Contains personal financial data. Users import their own Excel on first run; DB regenerates from import.
+
+## 2026-01-06: Custom NoScrollSpinBox widgets
+Created `widgets.py` with `NoScrollDoubleSpinBox` and `NoScrollSpinBox` that ignore wheel events. Prevents accidental value changes when scrolling the page.
+
+## 2026-01-06: Transactions tab caching with dirty flag
+Added `_data_dirty` flag to TransactionsView to skip expensive reload when switching tabs. Only reloads when: first load, date filter changes, or data is modified (add/edit/delete/generate).
+
+## 2026-01-06: $ sign as external label, not input prefix
+In Update All Balances dialog, moved `$` from `spinbox.setPrefix("$")` to a QLabel placed left of the input. Cleaner UX and matches user expectation.

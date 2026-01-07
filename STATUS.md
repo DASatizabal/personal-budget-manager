@@ -1,7 +1,7 @@
 # Personal Budget Manager - Status
 
 ## Goal / Current Milestone
-Replace Excel-based budget tracking with a Python desktop application. Currently: **MVP Complete** - core functionality working, ready for daily use.
+Replace Excel-based budget tracking with a Python desktop application. Currently: **Phase 1 Complete** - MVP working + UI polish applied.
 
 ## What's Done
 - [x] SQLite database schema (accounts, credit cards, loans, recurring charges, transactions, paycheck config, shared expenses)
@@ -15,13 +15,18 @@ Replace Excel-based budget tracking with a Python desktop application. Currently
 - [x] Paycheck configuration with deductions
 - [x] Lisa payment splitting (2 vs 3 paycheck months)
 - [x] Database backup/restore
+- [x] GitHub repository set up
+- [x] **Phase 1 UI Fixes:**
+  - Date display format MM/DD/YYYY
+  - $ sign as label (not inside input fields)
+  - No-scroll spinboxes to prevent accidental value changes
+  - Improved spacing/padding across UI
+  - Transactions tab caching (no reload on tab switch)
 
-## What's Next
-1. 90-day minimum balance alerts on dashboard
-2. CSV export functionality
-3. Transaction editing/deletion in ledger
-4. Balance recalculation tool
-5. Improved paycheck date handling
+## What's Next (Phase 2)
+1. CSV export functionality
+2. Balance recalculation tool
+3. Input validation across forms
 
 ## Current Blockers
 None
@@ -41,6 +46,7 @@ First run: Use File > Import from Excel to load data from your Excel workbook.
 | `main.py` | Application entry point |
 | `budget_app/views/dashboard_view.py` | Main dashboard with balance editing |
 | `budget_app/views/transactions_view.py` | Transaction ledger with recurring generation |
+| `budget_app/views/widgets.py` | Custom no-scroll spinbox widgets |
 | `budget_app/utils/excel_import.py` | Excel data import |
 | `budget_app/utils/calculations.py` | Running balance & projection calculations |
 | `budget_app/models/database.py` | SQLite schema and connection |
