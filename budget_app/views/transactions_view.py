@@ -4,11 +4,11 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QPushButton, QDialog, QFormLayout, QLineEdit,
     QComboBox, QHeaderView, QMessageBox, QDateEdit, QLabel,
-    QCheckBox, QGroupBox, QProgressBar, QApplication
+    QCheckBox, QGroupBox, QProgressBar, QApplication, QMenu
 )
 from .widgets import NoScrollDoubleSpinBox, NoScrollSpinBox
-from PyQt6.QtCore import Qt, QDate, QThread, pyqtSignal
-from PyQt6.QtGui import QColor, QBrush, QCursor
+from PyQt6.QtCore import Qt, QDate, QThread, pyqtSignal, QSettings
+from PyQt6.QtGui import QColor, QBrush, QCursor, QAction
 from datetime import datetime, timedelta, date
 import calendar
 
@@ -17,6 +17,7 @@ from ..models.credit_card import CreditCard
 from ..models.account import Account
 from ..models.recurring_charge import RecurringCharge
 from ..models.paycheck import PaycheckConfig
+from ..models.shared_expense import SharedExpense
 from ..utils.calculations import calculate_running_balances, get_starting_balances
 
 
@@ -52,6 +53,11 @@ class TransactionsView(QWidget):
         delete_btn.clicked.connect(self._delete_transaction)
         toolbar.addWidget(delete_btn)
 
+        delete_all_btn = QPushButton("Delete All")
+        delete_all_btn.setToolTip("Delete all transactions from the database")
+        delete_all_btn.clicked.connect(self._delete_all_transactions)
+        toolbar.addWidget(delete_all_btn)
+
         toolbar.addWidget(QLabel("  |  "))
 
         generate_btn = QPushButton("Generate Recurring")
@@ -80,6 +86,21 @@ class TransactionsView(QWidget):
         filter_btn.clicked.connect(self.refresh)
         toolbar.addWidget(filter_btn)
 
+        toolbar.addWidget(QLabel("  |  "))
+
+        # Payment method filter button
+        toolbar.addWidget(QLabel("Pay Types:"))
+        self.pay_type_btn = QPushButton("All ▼")
+        self.pay_type_menu = QMenu(self)
+        self.pay_type_btn.setMenu(self.pay_type_menu)
+        toolbar.addWidget(self.pay_type_btn)
+
+        # Columns visibility button with dropdown menu
+        self.columns_btn = QPushButton("Columns ▼")
+        self.columns_menu = QMenu(self)
+        self.columns_btn.setMenu(self.columns_menu)
+        toolbar.addWidget(self.columns_btn)
+
         layout.addLayout(toolbar)
 
         # Info label and progress bar
@@ -98,25 +119,269 @@ class TransactionsView(QWidget):
         self._setup_table_columns()
         layout.addWidget(self.table)
 
+        # Summary section at bottom
+        summary_layout = QHBoxLayout()
+        summary_layout.setSpacing(24)
+
+        self.chase_summary = QLabel("Chase: $0.00")
+        self.chase_summary.setStyleSheet("font-weight: bold;")
+        summary_layout.addWidget(self.chase_summary)
+
+        self.total_avail_label = QLabel("Total CC Available: $0.00")
+        self.total_avail_label.setStyleSheet("font-weight: bold;")
+        summary_layout.addWidget(self.total_avail_label)
+
+        self.total_util_label = QLabel("Utilization: 0%")
+        self.total_util_label.setStyleSheet("font-weight: bold;")
+        summary_layout.addWidget(self.total_util_label)
+
+        summary_layout.addStretch()
+        layout.addLayout(summary_layout)
+
     def _setup_table_columns(self):
         """Set up table columns dynamically based on available cards"""
         # Base columns
-        columns = ["Date", "Pay Type", "Description", "Amount", "Chase Balance"]
+        self._base_columns = ["Date", "Pay Type", "Description", "Amount", "Chase Balance"]
+        columns = self._base_columns.copy()
 
-        # Add columns for each credit card
-        cards = CreditCard.get_all()
-        for card in cards:
-            columns.append(f"{card.name} Avail")
+        # Add columns for each credit card (both Owed and Avail)
+        self._cards = CreditCard.get_all()
+        self._card_owed_columns = []
+        self._card_avail_columns = []
+        for card in self._cards:
+            owed_col = f"{card.name} Owed"
+            avail_col = f"{card.name} Avail"
+            columns.append(owed_col)
+            columns.append(avail_col)
+            self._card_owed_columns.append(owed_col)
+            self._card_avail_columns.append(avail_col)
 
         columns.append("CC Utilization")
+        self._all_columns = columns
 
         self.table.setColumnCount(len(columns))
         self.table.setHorizontalHeaderLabels(columns)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+
+        # Make columns user-resizable
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.setStretchLastSection(True)
+
+        # Set default column widths
+        default_widths = {
+            "Date": 90,
+            "Pay Type": 70,
+            "Description": 200,
+            "Amount": 100,
+            "Chase Balance": 110,
+            "CC Utilization": 100
+        }
+        for i, col in enumerate(columns):
+            if col in default_widths:
+                self.table.setColumnWidth(i, default_widths[col])
+            elif "Owed" in col or "Avail" in col:
+                self.table.setColumnWidth(i, 95)
+
+        # Restore saved column widths
+        self._load_column_widths()
+
+        # Connect to save column widths when resized
+        header.sectionResized.connect(self._save_column_widths)
+
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.doubleClicked.connect(self._edit_transaction)
+
+        # Set up the columns visibility menu
+        self._setup_columns_menu()
+
+        # Set up the payment type filter menu
+        self._setup_pay_type_menu()
+
+    def _save_column_widths(self):
+        """Save column widths to settings"""
+        settings = QSettings("BudgetApp", "PersonalBudgetManager")
+        widths = []
+        for i in range(self.table.columnCount()):
+            widths.append(self.table.columnWidth(i))
+        settings.setValue("transactions/column_widths", widths)
+
+    def _load_column_widths(self):
+        """Load column widths from settings"""
+        settings = QSettings("BudgetApp", "PersonalBudgetManager")
+        widths = settings.value("transactions/column_widths")
+        if widths and len(widths) == self.table.columnCount():
+            for i, width in enumerate(widths):
+                if isinstance(width, int) and width > 0:
+                    self.table.setColumnWidth(i, width)
+                elif isinstance(width, str) and width.isdigit():
+                    self.table.setColumnWidth(i, int(width))
+
+    def _setup_columns_menu(self):
+        """Set up the columns visibility menu"""
+        self.columns_menu.clear()
+        self._column_actions = {}
+
+        # Add "Show All" and "Hide CC Columns" quick actions
+        show_all_action = QAction("Show All Columns", self)
+        show_all_action.triggered.connect(self._show_all_columns)
+        self.columns_menu.addAction(show_all_action)
+
+        hide_cc_action = QAction("Hide All CC Columns", self)
+        hide_cc_action.triggered.connect(self._hide_all_cc_columns)
+        self.columns_menu.addAction(hide_cc_action)
+
+        self.columns_menu.addSeparator()
+
+        # Quick toggles for column groups
+        show_owed_action = QAction("Show All 'Owed' Columns", self)
+        show_owed_action.triggered.connect(lambda: self._toggle_column_group("Owed", True))
+        self.columns_menu.addAction(show_owed_action)
+
+        hide_owed_action = QAction("Hide All 'Owed' Columns", self)
+        hide_owed_action.triggered.connect(lambda: self._toggle_column_group("Owed", False))
+        self.columns_menu.addAction(hide_owed_action)
+
+        show_avail_action = QAction("Show All 'Avail' Columns", self)
+        show_avail_action.triggered.connect(lambda: self._toggle_column_group("Avail", True))
+        self.columns_menu.addAction(show_avail_action)
+
+        hide_avail_action = QAction("Hide All 'Avail' Columns", self)
+        hide_avail_action.triggered.connect(lambda: self._toggle_column_group("Avail", False))
+        self.columns_menu.addAction(hide_avail_action)
+
+        self.columns_menu.addSeparator()
+
+        # Load saved visibility settings
+        settings = QSettings("BudgetApp", "PersonalBudgetManager")
+        hidden_columns = settings.value("transactions/hidden_columns", [])
+        if hidden_columns is None:
+            hidden_columns = []
+
+        # Add checkable action for each credit card column (both Owed and Avail)
+        for i, col_name in enumerate(self._all_columns):
+            if "Owed" in col_name or "Avail" in col_name:
+                action = QAction(col_name, self)
+                action.setCheckable(True)
+                action.setChecked(col_name not in hidden_columns)
+                action.setData(i)  # Store column index
+                action.triggered.connect(lambda checked, idx=i: self._toggle_column(idx, checked))
+                self.columns_menu.addAction(action)
+                self._column_actions[i] = action
+
+                # Apply saved visibility - default: hide "Owed" columns initially
+                if col_name in hidden_columns or ("Owed" in col_name and col_name not in hidden_columns and not settings.contains("transactions/hidden_columns")):
+                    self.table.setColumnHidden(i, True)
+                    action.setChecked(False)
+
+    def _toggle_column(self, column_index: int, visible: bool):
+        """Toggle visibility of a column"""
+        self.table.setColumnHidden(column_index, not visible)
+        self._save_column_visibility()
+
+    def _show_all_columns(self):
+        """Show all columns"""
+        for i in range(self.table.columnCount()):
+            self.table.setColumnHidden(i, False)
+            if i in self._column_actions:
+                self._column_actions[i].setChecked(True)
+        self._save_column_visibility()
+
+    def _hide_all_cc_columns(self):
+        """Hide all credit card columns"""
+        for i, col_name in enumerate(self._all_columns):
+            if "Owed" in col_name or "Avail" in col_name:
+                self.table.setColumnHidden(i, True)
+                if i in self._column_actions:
+                    self._column_actions[i].setChecked(False)
+        self._save_column_visibility()
+
+    def _toggle_column_group(self, group_type: str, visible: bool):
+        """Toggle visibility of a group of columns (Owed or Avail)"""
+        for i, col_name in enumerate(self._all_columns):
+            if group_type in col_name:
+                self.table.setColumnHidden(i, not visible)
+                if i in self._column_actions:
+                    self._column_actions[i].setChecked(visible)
+        self._save_column_visibility()
+
+    def _save_column_visibility(self):
+        """Save column visibility to settings"""
+        settings = QSettings("BudgetApp", "PersonalBudgetManager")
+        hidden = []
+        for i, col_name in enumerate(self._all_columns):
+            if self.table.isColumnHidden(i):
+                hidden.append(col_name)
+        settings.setValue("transactions/hidden_columns", hidden)
+
+    def _setup_pay_type_menu(self):
+        """Set up the payment type filter menu"""
+        self.pay_type_menu.clear()
+        self._pay_type_actions = {}
+
+        # Add "All" and "None" quick actions
+        all_action = QAction("Select All", self)
+        all_action.triggered.connect(self._select_all_pay_types)
+        self.pay_type_menu.addAction(all_action)
+
+        none_action = QAction("Select None", self)
+        none_action.triggered.connect(self._select_no_pay_types)
+        self.pay_type_menu.addAction(none_action)
+
+        self.pay_type_menu.addSeparator()
+
+        # Add Chase (Bank account)
+        chase_action = QAction("Chase (Bank)", self)
+        chase_action.setCheckable(True)
+        chase_action.setChecked(True)
+        chase_action.setData("C")
+        chase_action.triggered.connect(self._update_pay_type_filter)
+        self.pay_type_menu.addAction(chase_action)
+        self._pay_type_actions["C"] = chase_action
+
+        # Add each credit card
+        for card in self._cards:
+            action = QAction(card.name, self)
+            action.setCheckable(True)
+            action.setChecked(True)
+            action.setData(card.pay_type_code)
+            action.triggered.connect(self._update_pay_type_filter)
+            self.pay_type_menu.addAction(action)
+            self._pay_type_actions[card.pay_type_code] = action
+
+    def _select_all_pay_types(self):
+        """Select all payment types"""
+        for action in self._pay_type_actions.values():
+            action.setChecked(True)
+        self._update_pay_type_filter()
+
+    def _select_no_pay_types(self):
+        """Deselect all payment types"""
+        for action in self._pay_type_actions.values():
+            action.setChecked(False)
+        self._update_pay_type_filter()
+
+    def _update_pay_type_filter(self):
+        """Update the filter button text and refresh if needed"""
+        selected = [code for code, action in self._pay_type_actions.items() if action.isChecked()]
+        total = len(self._pay_type_actions)
+
+        if len(selected) == total:
+            self.pay_type_btn.setText("All ▼")
+        elif len(selected) == 0:
+            self.pay_type_btn.setText("None ▼")
+        else:
+            self.pay_type_btn.setText(f"{len(selected)}/{total} ▼")
+
+        self.mark_dirty()
+        self.refresh()
+
+    def _get_selected_pay_types(self) -> list:
+        """Get list of selected payment type codes"""
+        if not hasattr(self, '_pay_type_actions'):
+            return None  # No filter applied
+        return [code for code, action in self._pay_type_actions.items() if action.isChecked()]
 
     def mark_dirty(self):
         """Mark data as dirty so next refresh reloads from database"""
@@ -157,7 +422,15 @@ class TransactionsView(QWidget):
             to_date = self.to_date.date().toString("yyyy-MM-dd")
 
             # Get transactions
-            transactions = Transaction.get_by_date_range(from_date, to_date)
+            all_transactions = Transaction.get_by_date_range(from_date, to_date)
+
+            # Filter by selected payment types
+            selected_pay_types = self._get_selected_pay_types()
+            if selected_pay_types is not None and len(selected_pay_types) < len(self._pay_type_actions):
+                transactions = [t for t in all_transactions if t.payment_method in selected_pay_types]
+            else:
+                transactions = all_transactions
+
             self.progress_bar.setValue(20)
             QApplication.processEvents()
 
@@ -230,23 +503,35 @@ class TransactionsView(QWidget):
                     chase_item.setForeground(QColor("#ff9800"))
                 self.table.setItem(row, 4, chase_item)
 
-                # Credit card available credit columns
+                # Credit card Owed and Available columns
                 for i, code in enumerate(card_codes):
-                    avail = card_limits.get(code, 0) - running.get(code, 0)
+                    owed = running.get(code, 0)
+                    avail = card_limits.get(code, 0) - owed
+
+                    # Owed column
+                    owed_item = QTableWidgetItem(f"${owed:,.2f}")
+                    if owed > card_limits.get(code, 0):
+                        owed_item.setForeground(QColor("#f44336"))
+                    elif owed > card_limits.get(code, 0) * 0.8:
+                        owed_item.setForeground(QColor("#ff9800"))
+                    self.table.setItem(row, 5 + (i * 2), owed_item)
+
+                    # Avail column
                     avail_item = QTableWidgetItem(f"${avail:,.2f}")
                     if avail < 0:
                         avail_item.setForeground(QColor("#f44336"))
                     elif avail < 100:
                         avail_item.setForeground(QColor("#ff9800"))
-                    self.table.setItem(row, 5 + i, avail_item)
+                    self.table.setItem(row, 5 + (i * 2) + 1, avail_item)
 
-                # Utilization
+                # Utilization (after all card columns)
+                util_col = 5 + (len(card_codes) * 2)
                 util_item = QTableWidgetItem(f"{utilization * 100:.1f}%")
                 if utilization > 0.8:
                     util_item.setForeground(QColor("#f44336"))
                 elif utilization > 0.5:
                     util_item.setForeground(QColor("#ff9800"))
-                self.table.setItem(row, 5 + len(card_codes), util_item)
+                self.table.setItem(row, util_col, util_item)
 
                 # Update progress every 50 rows
                 if row % 50 == 0:
@@ -264,6 +549,34 @@ class TransactionsView(QWidget):
                 f"{total_count - recurring_count} manual)"
             )
             self.progress_bar.setValue(100)
+
+            # Update summary section with final balances
+            final_chase = running.get('C', 0)
+            final_total_balance = sum(running.get(c.pay_type_code, 0) for c in cards)
+            final_total_avail = total_limit - final_total_balance
+            final_util = final_total_balance / total_limit if total_limit > 0 else 0
+
+            self.chase_summary.setText(f"Chase: ${final_chase:,.2f}")
+            if final_chase < 0:
+                self.chase_summary.setStyleSheet("font-weight: bold; color: #f44336;")
+            elif final_chase < 500:
+                self.chase_summary.setStyleSheet("font-weight: bold; color: #ff9800;")
+            else:
+                self.chase_summary.setStyleSheet("font-weight: bold; color: #4caf50;")
+
+            self.total_avail_label.setText(f"Total CC Available: ${final_total_avail:,.2f}")
+            if final_total_avail < 0:
+                self.total_avail_label.setStyleSheet("font-weight: bold; color: #f44336;")
+            else:
+                self.total_avail_label.setStyleSheet("font-weight: bold; color: #4caf50;")
+
+            self.total_util_label.setText(f"Utilization: {final_util * 100:.1f}%")
+            if final_util > 0.8:
+                self.total_util_label.setStyleSheet("font-weight: bold; color: #f44336;")
+            elif final_util > 0.5:
+                self.total_util_label.setStyleSheet("font-weight: bold; color: #ff9800;")
+            else:
+                self.total_util_label.setStyleSheet("font-weight: bold; color: #4caf50;")
 
         finally:
             QApplication.restoreOverrideCursor()
@@ -299,6 +612,10 @@ class TransactionsView(QWidget):
         # Get all active recurring charges
         charges = RecurringCharge.get_all(active_only=True)
 
+        # Get IDs of charges linked to shared expenses (Lisa Payments)
+        # These are handled separately in payday generation
+        lisa_linked_ids = SharedExpense.get_linked_recurring_ids()
+
         # Get paycheck config
         paycheck = PaycheckConfig.get_current()
 
@@ -311,8 +628,16 @@ class TransactionsView(QWidget):
             day = current_date.day
 
             for charge in charges:
-                # Skip special frequency and zero-amount charges
+                # Skip special frequency charges (handled separately)
                 if charge.frequency == 'SPECIAL':
+                    continue
+
+                # Skip charges with special day codes (991-999)
+                if charge.day_of_month >= 991:
+                    continue
+
+                # Skip charges linked to Lisa Payments (handled in payday generation)
+                if charge.id in lisa_linked_ids:
                     continue
 
                 # Handle day 32 as last day of month
@@ -342,8 +667,8 @@ class TransactionsView(QWidget):
 
             current_date += timedelta(days=1)
 
-        # Generate special charges
-        generated_count += self._generate_special_charges(today, end_date, charges)
+        # Generate special charges (pass lisa_linked_ids to exclude linked charges)
+        generated_count += self._generate_special_charges(today, end_date, charges, paycheck, lisa_linked_ids)
 
         # Generate payday transactions
         if paycheck:
@@ -361,23 +686,35 @@ class TransactionsView(QWidget):
         self.refresh()
 
     def _generate_special_charges(self, start_date: date, end_date: date,
-                                   charges: list) -> int:
+                                   charges: list, paycheck: PaycheckConfig = None,
+                                   lisa_linked_ids: set = None) -> int:
         """Generate transactions for special frequency charges"""
         count = 0
         special_charges = [c for c in charges if c.frequency == 'SPECIAL']
+
+        # Get payday from config (default to Friday=4)
+        pay_day = paycheck.pay_day_of_week if paycheck else 4
+
+        # Default to empty set if not provided
+        if lisa_linked_ids is None:
+            lisa_linked_ids = set()
 
         for charge in special_charges:
             # Skip Lisa payment codes (996-999) - handled separately based on paycheck count
             if charge.day_of_month >= 996:
                 continue
 
+            # Skip charges linked to Lisa Payments (handled in payday generation)
+            if charge.id in lisa_linked_ids:
+                continue
+
             if charge.day_of_month == 991:
                 # Mortgage - bi-weekly, aligned with payday
                 current = start_date
-                days_until_friday = (4 - current.weekday()) % 7
-                if days_until_friday == 0:
-                    days_until_friday = 7
-                current += timedelta(days=days_until_friday)
+                days_until_payday = (pay_day - current.weekday()) % 7
+                if days_until_payday == 0:
+                    days_until_payday = 7
+                current += timedelta(days=days_until_payday)
 
                 while current <= end_date:
                     trans = Transaction(
@@ -431,12 +768,25 @@ class TransactionsView(QWidget):
         if paycheck.pay_frequency != 'BIWEEKLY':
             return count
 
-        # Find first Friday
-        current = start_date
-        days_until_friday = (4 - current.weekday()) % 7
-        if days_until_friday == 0:
-            days_until_friday = 7
-        current += timedelta(days=days_until_friday)
+        # Use effective_date as the anchor for bi-weekly pay schedule
+        # Parse effective_date to get the reference payday
+        anchor_date = datetime.strptime(paycheck.effective_date, '%Y-%m-%d').date()
+
+        # Calculate the first payday on or after start_date
+        # Find how many days between anchor and start_date
+        days_diff = (start_date - anchor_date).days
+
+        # Find how many 14-day periods fit in that difference
+        periods = days_diff // 14
+        if days_diff % 14 != 0 and days_diff > 0:
+            periods += 1  # Round up to next payday
+
+        # First payday is anchor + (periods * 14 days)
+        current = anchor_date + timedelta(days=periods * 14)
+
+        # If current is before start_date (can happen with negative periods), move forward
+        while current < start_date:
+            current += timedelta(days=14)
 
         # Get Lisa payment charges
         lisa_2_charge = RecurringCharge.get_by_name('Lisa')
@@ -575,6 +925,42 @@ class TransactionsView(QWidget):
                 self.mark_dirty()
                 self.refresh()
 
+    def _delete_all_transactions(self):
+        """Delete all transactions from the database"""
+        # Get count for confirmation message
+        from ..models.database import Database
+        db = Database()
+        count = db.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
+
+        if count == 0:
+            QMessageBox.information(self, "Info", "There are no transactions to delete.")
+            return
+
+        reply = QMessageBox.warning(
+            self,
+            "Confirm Delete All",
+            f"This will permanently delete ALL {count} transactions.\n\n"
+            "This action cannot be undone.\n\n"
+            "Are you sure you want to continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            # Double confirmation for safety
+            reply2 = QMessageBox.warning(
+                self,
+                "Final Confirmation",
+                "Are you absolutely sure?\n\nAll transaction data will be lost.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+
+            if reply2 == QMessageBox.StandardButton.Yes:
+                db.execute("DELETE FROM transactions")
+                db.commit()
+                QMessageBox.information(self, "Deleted", f"Deleted {count} transactions.")
+                self.mark_dirty()
+                self.refresh()
+
 
 class GenerateRecurringDialog(QDialog):
     """Dialog for generating recurring transactions"""
@@ -687,13 +1073,27 @@ class TransactionDialog(QDialog):
         # Buttons
         btn_layout = QHBoxLayout()
         save_btn = QPushButton("Save")
-        save_btn.clicked.connect(self.accept)
+        save_btn.clicked.connect(self._validate_and_accept)
         cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addStretch()
         btn_layout.addWidget(save_btn)
         btn_layout.addWidget(cancel_btn)
         layout.addRow(btn_layout)
+
+    def _validate_and_accept(self):
+        """Validate form inputs before accepting"""
+        errors = []
+
+        description = self.desc_edit.text().strip()
+        if not description:
+            errors.append("Description is required.")
+
+        if errors:
+            QMessageBox.warning(self, "Validation Error", "\n".join(errors))
+            return
+
+        self.accept()
 
     def _load_payment_methods(self):
         """Load available payment methods"""

@@ -215,13 +215,36 @@ class RecurringChargeDialog(QDialog):
         # Buttons
         btn_layout = QHBoxLayout()
         save_btn = QPushButton("Save")
-        save_btn.clicked.connect(self.accept)
+        save_btn.clicked.connect(self._validate_and_accept)
         cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addStretch()
         btn_layout.addWidget(save_btn)
         btn_layout.addWidget(cancel_btn)
         layout.addRow(btn_layout)
+
+    def _validate_and_accept(self):
+        """Validate form inputs before accepting"""
+        errors = []
+
+        name = self.name_edit.text().strip()
+        if not name:
+            errors.append("Name is required.")
+
+        day = self.day_spin.value()
+        if day > 31 and day < 991:
+            errors.append("Day must be 1-31 for regular charges, or 991-999 for special charges.")
+
+        # If CREDIT_CARD_BALANCE type, linked card is required
+        if self.type_combo.currentText() == 'CREDIT_CARD_BALANCE':
+            if not self.linked_card_combo.currentData():
+                errors.append("Linked Card is required for Credit Card Balance type.")
+
+        if errors:
+            QMessageBox.warning(self, "Validation Error", "\n".join(errors))
+            return
+
+        self.accept()
 
     def _load_payment_methods(self):
         """Load available payment methods"""

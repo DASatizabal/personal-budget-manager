@@ -152,38 +152,80 @@ class CreditCardsView(QWidget):
                 self.refresh()
 
     def _delete_card(self):
-        """Delete the selected credit card"""
+        """Delete the selected credit card with reassignment options"""
         card_id = self._get_selected_card_id()
         if not card_id:
             QMessageBox.warning(self, "Warning", "Please select a card to delete")
             return
 
         card = CreditCard.get_by_id(card_id)
-        if card:
-            # Check for linked recurring charges
-            from ..models.database import Database
-            db = Database()
-            linked_count = db.execute(
-                "SELECT COUNT(*) FROM recurring_charges WHERE linked_card_id = ?",
-                (card_id,)
-            ).fetchone()[0]
+        if not card:
+            return
 
-            if linked_count > 0:
-                msg = (f"Are you sure you want to delete '{card.name}'?\n\n"
-                       f"Warning: {linked_count} recurring charge(s) are linked to this card "
-                       f"and will be unlinked.")
-            else:
-                msg = f"Are you sure you want to delete '{card.name}'?"
+        # Check for linked data
+        from ..models.database import Database
+        db = Database()
 
+        linked_charges = db.execute(
+            "SELECT id, name FROM recurring_charges WHERE linked_card_id = ?",
+            (card_id,)
+        ).fetchall()
+
+        transactions = db.execute(
+            "SELECT id, date, description, amount FROM transactions WHERE payment_method = ?",
+            (card.pay_type_code,)
+        ).fetchall()
+
+        # If no linked data, simple deletion
+        if not linked_charges and not transactions:
             reply = QMessageBox.question(
                 self,
                 "Confirm Delete",
-                msg,
+                f"Are you sure you want to delete '{card.name}'?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if reply == QMessageBox.StandardButton.Yes:
                 card.delete()
                 self.refresh()
+            return
+
+        # Show deletion dialog with reassignment options
+        dialog = CardDeletionDialog(self, card, linked_charges, transactions)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            target_card_id = dialog.get_target_card_id()
+            delete_transactions = dialog.get_delete_transactions()
+
+            # Reassign or unlink recurring charges
+            if target_card_id:
+                db.execute(
+                    "UPDATE recurring_charges SET linked_card_id = ? WHERE linked_card_id = ?",
+                    (target_card_id, card_id)
+                )
+            else:
+                db.execute(
+                    "UPDATE recurring_charges SET linked_card_id = NULL WHERE linked_card_id = ?",
+                    (card_id,)
+                )
+
+            # Handle transactions
+            if delete_transactions:
+                db.execute(
+                    "DELETE FROM transactions WHERE payment_method = ?",
+                    (card.pay_type_code,)
+                )
+            elif target_card_id:
+                # Transfer to target card
+                target_card = CreditCard.get_by_id(target_card_id)
+                if target_card:
+                    db.execute(
+                        "UPDATE transactions SET payment_method = ? WHERE payment_method = ?",
+                        (target_card.pay_type_code, card.pay_type_code)
+                    )
+
+            db.commit()
+            card.delete()
+            self.refresh()
+            QMessageBox.information(self, "Deleted", f"'{card.name}' has been deleted.")
 
 
 class CreditCardDialog(QDialog):
@@ -246,13 +288,42 @@ class CreditCardDialog(QDialog):
         # Buttons
         btn_layout = QHBoxLayout()
         save_btn = QPushButton("Save")
-        save_btn.clicked.connect(self.accept)
+        save_btn.clicked.connect(self._validate_and_accept)
         cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addStretch()
         btn_layout.addWidget(save_btn)
         btn_layout.addWidget(cancel_btn)
         layout.addRow(btn_layout)
+
+    def _validate_and_accept(self):
+        """Validate form inputs before accepting"""
+        errors = []
+
+        code = self.code_edit.text().strip()
+        if not code:
+            errors.append("Pay Type Code is required.")
+        elif len(code) > 3:
+            errors.append("Pay Type Code must be 3 characters or less.")
+
+        name = self.name_edit.text().strip()
+        if not name:
+            errors.append("Card Name is required.")
+
+        if self.limit_spin.value() <= 0:
+            errors.append("Credit Limit must be greater than 0.")
+
+        # Check for duplicate pay type code (only for new cards or changed codes)
+        if code:
+            existing = CreditCard.get_by_code(code)
+            if existing and (not self.card or existing.id != self.card.id):
+                errors.append(f"Pay Type Code '{code}' is already in use.")
+
+        if errors:
+            QMessageBox.warning(self, "Validation Error", "\n".join(errors))
+            return
+
+        self.accept()
 
     def _on_min_type_changed(self, index: int):
         """Handle min payment type change"""
@@ -289,3 +360,111 @@ class CreditCardDialog(QDialog):
             min_payment_type=min_type,
             min_payment_amount=self.min_amount_spin.value() if min_type == 'FIXED' else None
         )
+
+
+class CardDeletionDialog(QDialog):
+    """Dialog for handling credit card deletion with data reassignment"""
+
+    def __init__(self, parent, card: CreditCard, linked_charges: list, transactions: list):
+        super().__init__(parent)
+        self.card = card
+        self.linked_charges = linked_charges
+        self.transactions = transactions
+        self.setWindowTitle(f"Delete {card.name}")
+        self.setMinimumWidth(500)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        from PyQt6.QtWidgets import QVBoxLayout, QGroupBox, QRadioButton, QButtonGroup
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(16)
+
+        # Warning header
+        warning = QLabel(f"<b>Deleting '{self.card.name}' ({self.card.pay_type_code})</b>")
+        layout.addWidget(warning)
+
+        # Linked charges section
+        if self.linked_charges:
+            charges_group = QGroupBox(f"Linked Recurring Charges ({len(self.linked_charges)})")
+            charges_layout = QVBoxLayout(charges_group)
+
+            charge_names = ", ".join([c['name'] for c in self.linked_charges[:5]])
+            if len(self.linked_charges) > 5:
+                charge_names += f" and {len(self.linked_charges) - 5} more..."
+            charges_layout.addWidget(QLabel(charge_names))
+
+            charges_layout.addWidget(QLabel("Reassign these charges to:"))
+            self.charges_combo = QComboBox()
+            self.charges_combo.addItem("(Unlink - no card)", None)
+            for card in CreditCard.get_all():
+                if card.id != self.card.id:
+                    self.charges_combo.addItem(card.name, card.id)
+            charges_layout.addWidget(self.charges_combo)
+
+            layout.addWidget(charges_group)
+
+        # Transactions section
+        if self.transactions:
+            trans_group = QGroupBox(f"Transactions ({len(self.transactions)})")
+            trans_layout = QVBoxLayout(trans_group)
+
+            trans_layout.addWidget(QLabel(f"Found {len(self.transactions)} transaction(s) using this card."))
+
+            self.trans_button_group = QButtonGroup(self)
+            self.trans_transfer_radio = QRadioButton("Transfer to another card")
+            self.trans_delete_radio = QRadioButton("Delete all transactions")
+            self.trans_keep_radio = QRadioButton("Keep transactions (payment method will be invalid)")
+
+            self.trans_button_group.addButton(self.trans_transfer_radio, 0)
+            self.trans_button_group.addButton(self.trans_delete_radio, 1)
+            self.trans_button_group.addButton(self.trans_keep_radio, 2)
+            self.trans_transfer_radio.setChecked(True)
+
+            trans_layout.addWidget(self.trans_transfer_radio)
+
+            self.trans_target_combo = QComboBox()
+            for card in CreditCard.get_all():
+                if card.id != self.card.id:
+                    self.trans_target_combo.addItem(card.name, card.id)
+            trans_layout.addWidget(self.trans_target_combo)
+
+            trans_layout.addWidget(self.trans_delete_radio)
+            trans_layout.addWidget(self.trans_keep_radio)
+
+            # Connect radio buttons to enable/disable combo
+            self.trans_transfer_radio.toggled.connect(
+                lambda checked: self.trans_target_combo.setEnabled(checked)
+            )
+
+            layout.addWidget(trans_group)
+
+        # Buttons
+        btn_layout = QHBoxLayout()
+        delete_btn = QPushButton("Delete Card")
+        delete_btn.setStyleSheet("background-color: #f44336; color: white;")
+        delete_btn.clicked.connect(self.accept)
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        btn_layout.addStretch()
+        btn_layout.addWidget(cancel_btn)
+        btn_layout.addWidget(delete_btn)
+        layout.addLayout(btn_layout)
+
+    def get_target_card_id(self) -> int:
+        """Get the target card ID for charge reassignment"""
+        if hasattr(self, 'charges_combo'):
+            return self.charges_combo.currentData()
+        return None
+
+    def get_delete_transactions(self) -> bool:
+        """Return True if transactions should be deleted"""
+        if hasattr(self, 'trans_delete_radio'):
+            return self.trans_delete_radio.isChecked()
+        return False
+
+    def get_transaction_target_id(self) -> int:
+        """Get target card ID for transaction transfer"""
+        if hasattr(self, 'trans_transfer_radio') and self.trans_transfer_radio.isChecked():
+            return self.trans_target_combo.currentData()
+        return None

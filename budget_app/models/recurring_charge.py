@@ -47,12 +47,12 @@ class RecurringCharge:
             db.commit()
 
     def get_actual_amount(self) -> float:
-        """Get the actual amount, resolving linked card balances if needed"""
+        """Get the actual amount, resolving linked card minimum payments if needed"""
         if self.amount_type == 'CREDIT_CARD_BALANCE' and self.linked_card_id:
             from .credit_card import CreditCard
             card = CreditCard.get_by_id(self.linked_card_id)
             if card:
-                return -card.current_balance  # Negative because it's a payment
+                return -card.min_payment  # Negative because it's a payment (uses minimum payment, not full balance)
         return self.amount
 
     @classmethod

@@ -51,6 +51,10 @@ class PaycheckView(QWidget):
         summary_layout.addWidget(QLabel("Pay Frequency:"), 1, 2)
         summary_layout.addWidget(self.frequency_label, 1, 3)
 
+        self.pay_day_label = QLabel()
+        summary_layout.addWidget(QLabel("Pay Day:"), 1, 4)
+        summary_layout.addWidget(self.pay_day_label, 1, 5)
+
         self.annual_gross_label = QLabel()
         summary_layout.addWidget(QLabel("Annual Gross:"), 2, 0)
         summary_layout.addWidget(self.annual_gross_label, 2, 1)
@@ -110,6 +114,8 @@ class PaycheckView(QWidget):
             self.deductions_label.setText(f"${config.total_deductions:,.2f}")
             self.net_label.setText(f"${config.net_pay:,.2f}")
             self.frequency_label.setText(config.pay_frequency)
+            day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            self.pay_day_label.setText(day_names[config.pay_day_of_week] if config.pay_day_of_week < 7 else "Friday")
             self.annual_gross_label.setText(f"${config.annual_gross:,.2f}")
             self.annual_net_label.setText(f"${config.annual_net:,.2f}")
 
@@ -134,6 +140,7 @@ class PaycheckView(QWidget):
             self.deductions_label.setText("$0.00")
             self.net_label.setText("$0.00")
             self.frequency_label.setText("N/A")
+            self.pay_day_label.setText("N/A")
             self.annual_gross_label.setText("$0.00")
             self.annual_net_label.setText("$0.00")
             self.table.setRowCount(0)
@@ -247,6 +254,15 @@ class PaycheckConfigDialog(QDialog):
         self.frequency_combo.addItems(["BIWEEKLY", "WEEKLY", "SEMIMONTHLY", "MONTHLY"])
         layout.addRow("Pay Frequency:", self.frequency_combo)
 
+        self.pay_day_combo = QComboBox()
+        self.pay_day_combo.addItem("Monday", 0)
+        self.pay_day_combo.addItem("Tuesday", 1)
+        self.pay_day_combo.addItem("Wednesday", 2)
+        self.pay_day_combo.addItem("Thursday", 3)
+        self.pay_day_combo.addItem("Friday", 4)
+        self.pay_day_combo.setCurrentIndex(4)  # Default to Friday
+        layout.addRow("Pay Day:", self.pay_day_combo)
+
         self.effective_date = QDateEdit()
         self.effective_date.setDate(QDate.currentDate())
         self.effective_date.setCalendarPopup(True)
@@ -272,6 +288,11 @@ class PaycheckConfigDialog(QDialog):
         if freq_index >= 0:
             self.frequency_combo.setCurrentIndex(freq_index)
 
+        # Set pay day of week
+        pay_day_index = self.pay_day_combo.findData(self.config.pay_day_of_week)
+        if pay_day_index >= 0:
+            self.pay_day_combo.setCurrentIndex(pay_day_index)
+
         if self.config.effective_date:
             date = QDate.fromString(self.config.effective_date, "yyyy-MM-dd")
             self.effective_date.setDate(date)
@@ -283,7 +304,8 @@ class PaycheckConfigDialog(QDialog):
             gross_amount=self.gross_spin.value(),
             pay_frequency=self.frequency_combo.currentText(),
             effective_date=self.effective_date.date().toString("yyyy-MM-dd"),
-            is_current=True
+            is_current=True,
+            pay_day_of_week=self.pay_day_combo.currentData()
         )
 
 

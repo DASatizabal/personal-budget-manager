@@ -26,3 +26,15 @@ Added `_data_dirty` flag to TransactionsView to skip expensive reload when switc
 
 ## 2026-01-06: $ sign as external label, not input prefix
 In Update All Balances dialog, moved `$` from `spinbox.setPrefix("$")` to a QLabel placed left of the input. Cleaner UX and matches user expectation.
+
+## 2026-01-08: Credit card payments use minimum payment, not full balance
+Changed `RecurringCharge.get_actual_amount()` to return `card.min_payment` instead of `card.current_balance` for credit card payment transactions. More realistic for projections.
+
+## 2026-01-08: Transaction sorting - positive before negative on same day
+Changed ORDER BY from `date, id` to `date, amount DESC, id`. Ensures income (Payday) appears before expenses on the same day, giving accurate running balance progression.
+
+## 2026-01-08: Payday uses effective_date as bi-weekly anchor
+Changed payday generation to use `paycheck.effective_date` as the reference point for the bi-weekly schedule, not just "next Friday from today". Paydays are calculated as multiples of 14 days from the anchor.
+
+## 2026-01-08: Delete ALL future non-posted transactions on regenerate
+Changed `Transaction.delete_future_recurring()` to delete all transactions where `is_posted = 0`, not just those with `recurring_charge_id IS NOT NULL`. Fixes duplicate Payday/LDBPD transactions.

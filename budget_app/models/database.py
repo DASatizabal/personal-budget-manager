@@ -1,11 +1,15 @@
 """Database connection and initialization"""
 
 import sqlite3
+import logging
 from pathlib import Path
 from typing import Optional
 import os
 
 DB_PATH = Path(__file__).parent.parent.parent / "budget_data.db"
+
+# Use standard logging to avoid circular import
+_logger = logging.getLogger('budget_app.database')
 
 
 class Database:
@@ -22,6 +26,7 @@ class Database:
     @property
     def connection(self) -> sqlite3.Connection:
         if self._connection is None:
+            _logger.debug(f"Opening database connection to {DB_PATH}")
             self._connection = sqlite3.connect(str(DB_PATH))
             self._connection.row_factory = sqlite3.Row
             self._connection.execute("PRAGMA foreign_keys = ON")
@@ -38,6 +43,7 @@ class Database:
 
     def close(self):
         if self._connection:
+            _logger.debug("Closing database connection")
             self._connection.close()
             self._connection = None
 
@@ -165,5 +171,13 @@ def init_db():
     db.execute("CREATE INDEX IF NOT EXISTS idx_transactions_payment_method ON transactions(payment_method)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_recurring_day ON recurring_charges(day_of_month)")
 
+    # Migration: Add pay_day_of_week column if not exists (default Friday = 4)
+    try:
+        db.execute("SELECT pay_day_of_week FROM paycheck_configs LIMIT 1")
+    except Exception:
+        _logger.info("Running migration: Adding pay_day_of_week column")
+        db.execute("ALTER TABLE paycheck_configs ADD COLUMN pay_day_of_week INTEGER NOT NULL DEFAULT 4")
+
     db.commit()
+    _logger.info("Database initialized successfully")
     return db

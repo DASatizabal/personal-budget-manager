@@ -100,6 +100,7 @@ class DashboardView(QWidget):
         self.cards_table.setAlternatingRowColors(True)
         self.cards_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.cards_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.cards_table.setSortingEnabled(True)
         self.cards_table.doubleClicked.connect(self._edit_card_balance)
         cards_layout.addWidget(self.cards_table)
 
@@ -117,6 +118,7 @@ class DashboardView(QWidget):
         self.loans_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.loans_table.setAlternatingRowColors(True)
         self.loans_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.loans_table.setSortingEnabled(True)
         self.loans_table.doubleClicked.connect(self._edit_loan_balance)
         loans_layout.addWidget(self.loans_table)
 
@@ -479,6 +481,20 @@ class UpdateAllBalancesDialog(QDialog):
 
     def _save_all(self):
         """Save all balance updates"""
+        # Count how many items will be updated
+        total_items = len(self.account_spins) + len(self.card_spins) + len(self.loan_spins)
+
+        # Confirm before bulk update
+        reply = QMessageBox.question(
+            self,
+            "Confirm Update",
+            f"This will update {total_items} balance(s).\n\n"
+            "Are you sure you want to save all changes?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
         # Update accounts
         for account_id, spin in self.account_spins.items():
             account = Account.get_by_id(account_id)

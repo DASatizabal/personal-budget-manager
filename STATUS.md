@@ -1,7 +1,7 @@
 # Personal Budget Manager - Status
 
 ## Goal / Current Milestone
-Replace Excel-based budget tracking with a Python desktop application. Currently: **Phase 1 Complete** - MVP working + UI polish applied.
+Replace Excel-based budget tracking with a Python desktop application. Currently: **Phase 8 Complete** - MVP working + all phases through infrastructure complete.
 
 ## What's Done
 - [x] SQLite database schema (accounts, credit cards, loans, recurring charges, transactions, paycheck config, shared expenses)
@@ -22,11 +22,55 @@ Replace Excel-based budget tracking with a Python desktop application. Currently
   - No-scroll spinboxes to prevent accidental value changes
   - Improved spacing/padding across UI
   - Transactions tab caching (no reload on tab switch)
+- [x] **Phase 2 Core Features:**
+  - CSV export with table selection and date filtering
+  - Balance recalculation tool (compare stored vs calculated balances)
+  - Input validation on all forms (Transaction, Credit Card, Recurring Charge)
+- [x] **Phase 3 Transactions Enhancements:**
+  - Resizable columns with persistent widths (QSettings)
+  - Column visibility toggles (Owed/Avail columns per card)
+  - Payment type filter dropdown (multi-select)
+  - Summary bar showing Chase balance, total CC available, utilization
+  - Both "Owed" and "Avail" columns for each credit card
+- [x] **Phase 4 Generation Fixes:**
+  - Exclude special day codes (991-999) from regular generation loop
+  - Exclude charges linked to Lisa Payments via shared_expenses
+  - Configurable payday (pay_day_of_week in paycheck config)
+  - Database migration for new column
+- [x] **Phase 5 Credit Card Management:**
+  - Enhanced card deletion workflow with CardDeletionDialog
+  - Prompt to reassign linked charges when deleting card
+  - Option to transfer or delete associated transactions
+- [x] **Phase 6 Dashboard Improvements:**
+  - Column sorting enabled on credit cards and loans tables
+  - 90-day minimum balance alerts (already implemented)
+- [x] **Phase 7 Data Safety & Quality:**
+  - Auto-backup system before destructive operations
+  - Undo functionality (Edit > Undo, Ctrl+Z)
+  - Restore from auto-backup dialog
+  - Confirmation dialogs for bulk operations
+  - Detailed Excel import error handling with warnings
+- [x] **Phase 8 Project Infrastructure:**
+  - Logging system (budget_app/utils/logging_config.py)
+  - Unit tests (25 tests for models and calculations)
+  - pyproject.toml for proper Python packaging
 
-## What's Next (Phase 2)
-1. CSV export functionality
-2. Balance recalculation tool
-3. Input validation across forms
+## Session 2026-01-08 Fixes
+- Credit card payments now use minimum payment instead of full balance
+- Transaction sorting: positive amounts (Payday) before negative (charges) on same day
+- Payday generation uses effective_date as anchor for bi-weekly schedule
+- Fixed duplicate transactions: delete ALL future non-posted transactions on regenerate
+- Added "Delete All" button to Transactions toolbar
+- Fixed Lisa-linked charges (Mortgage, Spaceship, etc.) being excluded from generation
+- Fixed shared_expenses linking in database
+
+## What's Next (Phase 9 - Future/Advanced)
+Phase 9 contains advanced features for future development:
+1. Tax estimation feature
+2. Optimal payment distribution algorithm
+3. Deferred interest purchase tracking
+4. Credit card statement parsing (PDF/CSV)
+5. Bank API integration (Plaid/Yodlee)
 
 ## Current Blockers
 None

@@ -83,3 +83,12 @@ class SharedExpense:
         """Calculate total Lisa payment for a pay period"""
         expenses = cls.get_all()
         return sum(e.get_split_amount(paycheck_count) for e in expenses)
+
+    @classmethod
+    def get_linked_recurring_ids(cls) -> set:
+        """Get set of recurring_charge IDs that are linked to shared expenses"""
+        db = Database()
+        rows = db.execute(
+            "SELECT linked_recurring_id FROM shared_expenses WHERE linked_recurring_id IS NOT NULL"
+        ).fetchall()
+        return {row[0] for row in rows}

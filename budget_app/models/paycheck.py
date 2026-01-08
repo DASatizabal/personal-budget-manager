@@ -50,6 +50,7 @@ class PaycheckConfig:
     pay_frequency: str = 'BIWEEKLY'
     effective_date: str = ''
     is_current: bool = True
+    pay_day_of_week: int = 4  # 0=Monday, 4=Friday
     deductions: List[PaycheckDeduction] = field(default_factory=list)
 
     @property
@@ -75,17 +76,19 @@ class PaycheckConfig:
         if self.id is None:
             cursor = db.execute("""
                 INSERT INTO paycheck_configs
-                (gross_amount, pay_frequency, effective_date, is_current)
-                VALUES (?, ?, ?, ?)
-            """, (self.gross_amount, self.pay_frequency, self.effective_date, int(self.is_current)))
+                (gross_amount, pay_frequency, effective_date, is_current, pay_day_of_week)
+                VALUES (?, ?, ?, ?, ?)
+            """, (self.gross_amount, self.pay_frequency, self.effective_date,
+                  int(self.is_current), self.pay_day_of_week))
             self.id = cursor.lastrowid
         else:
             db.execute("""
                 UPDATE paycheck_configs SET
-                gross_amount = ?, pay_frequency = ?, effective_date = ?, is_current = ?
+                gross_amount = ?, pay_frequency = ?, effective_date = ?, is_current = ?,
+                pay_day_of_week = ?
                 WHERE id = ?
             """, (self.gross_amount, self.pay_frequency, self.effective_date,
-                  int(self.is_current), self.id))
+                  int(self.is_current), self.pay_day_of_week, self.id))
         db.commit()
         return self
 

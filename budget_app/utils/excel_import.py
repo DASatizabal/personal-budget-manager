@@ -2,8 +2,9 @@
 
 import pandas as pd
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 import math
+from dataclasses import dataclass, field
 
 from ..models.database import Database, init_db
 from ..models.credit_card import CreditCard
@@ -12,54 +13,155 @@ from ..models.recurring_charge import RecurringCharge
 from ..models.account import Account
 from ..models.paycheck import PaycheckConfig, PaycheckDeduction
 from ..models.shared_expense import SharedExpense
+from .logging_config import get_logger
+
+_logger = get_logger('import')
+
+
+class ImportError(Exception):
+    """Custom exception for import errors with detailed information"""
+    def __init__(self, message: str, sheet: str = None, row: int = None, details: str = None):
+        self.message = message
+        self.sheet = sheet
+        self.row = row
+        self.details = details
+        super().__init__(self._format_message())
+
+    def _format_message(self) -> str:
+        parts = [self.message]
+        if self.sheet:
+            parts.append(f"Sheet: {self.sheet}")
+        if self.row is not None:
+            parts.append(f"Row: {self.row}")
+        if self.details:
+            parts.append(f"Details: {self.details}")
+        return " | ".join(parts)
+
+
+@dataclass
+class ImportResult:
+    """Detailed import results with success counts and warnings"""
+    credit_cards: int = 0
+    loans: int = 0
+    recurring_charges: int = 0
+    accounts: int = 0
+    paycheck_configs: int = 0
+    shared_expenses: int = 0
+    warnings: List[str] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            'credit_cards': self.credit_cards,
+            'loans': self.loans,
+            'recurring_charges': self.recurring_charges,
+            'accounts': self.accounts,
+            'paycheck_configs': self.paycheck_configs,
+            'shared_expenses': self.shared_expenses,
+            'warnings': self.warnings,
+            'errors': self.errors
+        }
 
 
 def import_from_excel(excel_path: str, clear_existing: bool = True) -> dict:
     """
     Import data from the Excel budget workbook.
-    Returns a dict with counts of imported items.
+    Returns a dict with counts of imported items plus warnings/errors.
 
     Args:
         excel_path: Path to the Excel file
         clear_existing: If True, clears existing data before importing
     """
+    _logger.info(f"Starting Excel import from: {excel_path}")
+
     path = Path(excel_path)
     if not path.exists():
+        _logger.error(f"Excel file not found: {excel_path}")
         raise FileNotFoundError(f"Excel file not found: {excel_path}")
 
     # Initialize the database
     init_db()
 
+    # Validate the Excel file has required sheets
+    try:
+        xl = pd.ExcelFile(excel_path)
+        _logger.debug(f"Excel file opened successfully. Sheets: {xl.sheet_names}")
+    except Exception as e:
+        _logger.error(f"Failed to open Excel file: {e}")
+        raise ImportError(
+            "Failed to open Excel file",
+            details=f"The file may be corrupted or in an unsupported format: {str(e)}"
+        )
+
+    required_sheets = ['Credit Card Info', 'Summary', 'Reoccuring Charges']
+    missing_sheets = [s for s in required_sheets if s not in xl.sheet_names]
+    if missing_sheets:
+        raise ImportError(
+            "Missing required worksheets",
+            details=f"The Excel file must contain these sheets: {', '.join(missing_sheets)}"
+        )
+
     # Clear existing data if requested
     if clear_existing:
         _clear_existing_data()
 
-    xl = pd.ExcelFile(excel_path)
-    results = {
-        'credit_cards': 0,
-        'loans': 0,
-        'recurring_charges': 0,
-        'accounts': 0,
-        'paycheck_configs': 0,
-        'shared_expenses': 0
-    }
+    result = ImportResult()
 
     # Import Credit Card Info
-    results['credit_cards'], results['loans'] = _import_credit_cards(xl)
+    try:
+        result.credit_cards, result.loans, card_warnings = _import_credit_cards(xl)
+        result.warnings.extend(card_warnings)
+    except Exception as e:
+        raise ImportError(
+            "Failed to import credit cards",
+            sheet="Credit Card Info",
+            details=str(e)
+        )
 
     # Import Accounts (from Summary sheet)
-    results['accounts'] = _import_accounts(xl)
+    try:
+        result.accounts, account_warnings = _import_accounts(xl)
+        result.warnings.extend(account_warnings)
+    except Exception as e:
+        raise ImportError(
+            "Failed to import accounts",
+            sheet="Summary",
+            details=str(e)
+        )
 
     # Import Recurring Charges
-    results['recurring_charges'] = _import_recurring_charges(xl)
+    try:
+        result.recurring_charges, charge_warnings = _import_recurring_charges(xl)
+        result.warnings.extend(charge_warnings)
+    except Exception as e:
+        raise ImportError(
+            "Failed to import recurring charges",
+            sheet="Reoccuring Charges",
+            details=str(e)
+        )
 
     # Import Paycheck Configuration
-    results['paycheck_configs'] = _import_paycheck_config(xl)
+    try:
+        result.paycheck_configs, paycheck_warnings = _import_paycheck_config(xl)
+        result.warnings.extend(paycheck_warnings)
+    except Exception as e:
+        # Paycheck is less critical, add warning instead of failing
+        result.warnings.append(f"Could not import paycheck config: {str(e)}")
 
     # Import Shared Expenses (Lisa payments)
-    results['shared_expenses'] = _import_shared_expenses(xl)
+    try:
+        result.shared_expenses = _import_shared_expenses(xl)
+    except Exception as e:
+        # Shared expenses are less critical, add warning instead of failing
+        result.warnings.append(f"Could not import shared expenses: {str(e)}")
 
-    return results
+    _logger.info(
+        f"Excel import completed: {result.credit_cards} cards, {result.loans} loans, "
+        f"{result.recurring_charges} charges, {result.accounts} accounts, "
+        f"{len(result.warnings)} warnings"
+    )
+
+    return result.to_dict()
 
 
 def _clear_existing_data():
@@ -78,7 +180,9 @@ def _clear_existing_data():
 
 
 def _import_credit_cards(xl: pd.ExcelFile) -> tuple:
-    """Import credit cards and loans from Credit Card Info sheet"""
+    """Import credit cards and loans from Credit Card Info sheet
+    Returns: (cards_count, loans_count, warnings)
+    """
     df = pd.read_excel(xl, 'Credit Card Info', header=0)
 
     # Clean column names
@@ -86,11 +190,18 @@ def _import_credit_cards(xl: pd.ExcelFile) -> tuple:
 
     cards_count = 0
     loans_count = 0
+    warnings = []
 
     # Known 401k loan codes
     loan_codes = ['K1', 'K2']
 
-    for _, row in df.iterrows():
+    # Validate required columns
+    required_cols = ['Pay Type', 'List of Credit Cards']
+    missing_cols = [c for c in required_cols if c not in df.columns]
+    if missing_cols:
+        raise ValueError(f"Missing required columns: {', '.join(missing_cols)}")
+
+    for idx, row in df.iterrows():
         pay_type = str(row.get('Pay Type', '')).strip()
         name = str(row.get('List of Credit Cards', '')).strip()
 
@@ -103,50 +214,63 @@ def _import_credit_cards(xl: pd.ExcelFile) -> tuple:
         due_day = _safe_int(row.get('Due Date'))
         min_payment = _safe_float(row.get('Min Payment', 0))
 
-        if pay_type in loan_codes:
-            # This is a loan
-            loan = Loan(
-                id=None,
-                pay_type_code=pay_type,
-                name=name,
-                original_amount=line_amount,
-                current_balance=balance,
-                interest_rate=interest_rate,
-                payment_amount=min_payment
-            )
-            loan.save()
-            loans_count += 1
-        else:
-            # This is a credit card
-            # Determine min payment type
-            min_type = 'CALCULATED'
-            if min_payment == balance and balance > 0:
-                min_type = 'FULL_BALANCE'
-            elif min_payment > 0:
-                min_type = 'FIXED'
+        # Validation warnings
+        if line_amount <= 0 and pay_type not in loan_codes:
+            warnings.append(f"Card '{name}' has no credit limit set")
+        if due_day is None or due_day < 1 or due_day > 31:
+            if pay_type not in loan_codes:
+                warnings.append(f"Card '{name}' has invalid due day: {due_day}")
 
-            card = CreditCard(
-                id=None,
-                pay_type_code=pay_type,
-                name=name,
-                credit_limit=line_amount,
-                current_balance=balance,
-                interest_rate=interest_rate,
-                due_day=due_day,
-                min_payment_type=min_type,
-                min_payment_amount=min_payment if min_type == 'FIXED' else None
-            )
-            card.save()
-            cards_count += 1
+        try:
+            if pay_type in loan_codes:
+                # This is a loan
+                loan = Loan(
+                    id=None,
+                    pay_type_code=pay_type,
+                    name=name,
+                    original_amount=line_amount,
+                    current_balance=balance,
+                    interest_rate=interest_rate,
+                    payment_amount=min_payment
+                )
+                loan.save()
+                loans_count += 1
+            else:
+                # This is a credit card
+                # Determine min payment type
+                min_type = 'CALCULATED'
+                if min_payment == balance and balance > 0:
+                    min_type = 'FULL_BALANCE'
+                elif min_payment > 0:
+                    min_type = 'FIXED'
 
-    return cards_count, loans_count
+                card = CreditCard(
+                    id=None,
+                    pay_type_code=pay_type,
+                    name=name,
+                    credit_limit=line_amount,
+                    current_balance=balance,
+                    interest_rate=interest_rate,
+                    due_day=due_day if due_day and 1 <= due_day <= 31 else 1,
+                    min_payment_type=min_type,
+                    min_payment_amount=min_payment if min_type == 'FIXED' else None
+                )
+                card.save()
+                cards_count += 1
+        except Exception as e:
+            warnings.append(f"Failed to import row {idx + 2} ({name}): {str(e)}")
+
+    return cards_count, loans_count, warnings
 
 
-def _import_accounts(xl: pd.ExcelFile) -> int:
-    """Import bank accounts from Summary sheet"""
+def _import_accounts(xl: pd.ExcelFile) -> tuple:
+    """Import bank accounts from Summary sheet
+    Returns: (accounts_count, warnings)
+    """
     df = pd.read_excel(xl, 'Summary', header=None)
 
     accounts_count = 0
+    warnings = []
 
     # Based on the Excel structure:
     # Row 1: C = Chase, Amount in column 2
@@ -171,20 +295,33 @@ def _import_accounts(xl: pd.ExcelFile) -> int:
             )
             account.save()
             accounts_count += 1
-        except (IndexError, KeyError):
+        except (IndexError, KeyError) as e:
+            warnings.append(f"Could not import account '{name}': row {row_idx} not found in Summary sheet")
             continue
 
-    return accounts_count
+    if accounts_count == 0:
+        warnings.append("No accounts were imported from Summary sheet")
+
+    return accounts_count, warnings
 
 
-def _import_recurring_charges(xl: pd.ExcelFile) -> int:
-    """Import recurring charges from Reoccuring Charges sheet"""
+def _import_recurring_charges(xl: pd.ExcelFile) -> tuple:
+    """Import recurring charges from Reoccuring Charges sheet
+    Returns: (charges_count, warnings)
+    """
     df = pd.read_excel(xl, 'Reoccuring Charges', header=0)
 
     # Clean column names
     df.columns = df.columns.str.strip()
 
     charges_count = 0
+    warnings = []
+
+    # Validate required columns
+    required_cols = ['Trans Name', 'Due Date']
+    missing_cols = [c for c in required_cols if c not in df.columns]
+    if missing_cols:
+        raise ValueError(f"Missing required columns: {', '.join(missing_cols)}")
 
     # Get credit card name to ID mapping for linking
     cards = CreditCard.get_all()
@@ -192,6 +329,7 @@ def _import_recurring_charges(xl: pd.ExcelFile) -> int:
 
     # Track seen names to avoid duplicates from projection tables
     seen_names = set()
+    skipped_count = 0
 
     for idx, row in df.iterrows():
         # Stop reading after row 40 (projection data starts after)
@@ -207,10 +345,12 @@ def _import_recurring_charges(xl: pd.ExcelFile) -> int:
         payment_method = str(row.get('Payment Method', 'C')).strip()
 
         if day is None:
+            skipped_count += 1
             continue
 
         # Skip if day is outside valid range (1-31 or 991-999 for special)
         if not ((1 <= day <= 32) or (991 <= day <= 999)):
+            warnings.append(f"Charge '{name}' skipped: invalid day {day}")
             continue
 
         # Create unique key for deduplication
@@ -237,26 +377,35 @@ def _import_recurring_charges(xl: pd.ExcelFile) -> int:
         if payment_method == 'nan' or not payment_method:
             payment_method = 'C'  # Default to Chase
 
-        charge = RecurringCharge(
-            id=None,
-            name=name,
-            amount=amount,
-            day_of_month=day,
-            payment_method=payment_method,
-            frequency=frequency,
-            amount_type=amount_type,
-            linked_card_id=linked_card_id,
-            is_active=True
-        )
-        charge.save()
-        charges_count += 1
+        try:
+            charge = RecurringCharge(
+                id=None,
+                name=name,
+                amount=amount,
+                day_of_month=day,
+                payment_method=payment_method,
+                frequency=frequency,
+                amount_type=amount_type,
+                linked_card_id=linked_card_id,
+                is_active=True
+            )
+            charge.save()
+            charges_count += 1
+        except Exception as e:
+            warnings.append(f"Failed to import charge '{name}': {str(e)}")
 
-    return charges_count
+    if skipped_count > 0:
+        warnings.append(f"Skipped {skipped_count} rows with missing due dates")
+
+    return charges_count, warnings
 
 
-def _import_paycheck_config(xl: pd.ExcelFile) -> int:
-    """Import paycheck configuration from Reoccuring Charges sheet"""
+def _import_paycheck_config(xl: pd.ExcelFile) -> tuple:
+    """Import paycheck configuration from Reoccuring Charges sheet
+    Returns: (count, warnings)
+    """
     df = pd.read_excel(xl, 'Reoccuring Charges', header=None)
+    warnings = []
 
     # Based on Excel structure, paycheck info is in columns 5-8 (F-I)
     # Row 0 has headers, Row 1+ has data
@@ -268,6 +417,7 @@ def _import_paycheck_config(xl: pd.ExcelFile) -> int:
         gross_pay = _safe_float(df.iloc[2, 15])  # 2025 column
         if not gross_pay or gross_pay <= 0:
             gross_pay = 3876.65  # Default from the Excel data
+            warnings.append("Using default gross pay amount ($3,876.65) - could not find value in spreadsheet")
 
         # Create paycheck config
         config = PaycheckConfig(
@@ -304,9 +454,10 @@ def _import_paycheck_config(xl: pd.ExcelFile) -> int:
             )
             deduction.save()
 
-        return 1
-    except (IndexError, KeyError, ValueError):
-        return 0
+        return 1, warnings
+    except (IndexError, KeyError, ValueError) as e:
+        warnings.append(f"Failed to import paycheck config: {str(e)}")
+        return 0, warnings
 
 
 def _import_shared_expenses(xl: pd.ExcelFile) -> int:

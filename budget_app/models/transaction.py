@@ -61,7 +61,8 @@ class Transaction:
     @classmethod
     def get_all(cls, limit: int = None, offset: int = 0) -> List['Transaction']:
         db = Database()
-        sql = "SELECT * FROM transactions ORDER BY date, id"
+        # Sort by date, then amount DESC (positive before negative), then id
+        sql = "SELECT * FROM transactions ORDER BY date, amount DESC, id"
         if limit:
             sql += f" LIMIT {limit} OFFSET {offset}"
         rows = db.execute(sql).fetchall()
@@ -78,7 +79,7 @@ class Transaction:
         rows = db.execute("""
             SELECT * FROM transactions
             WHERE date >= ? AND date <= ?
-            ORDER BY date, id
+            ORDER BY date, amount DESC, id
         """, (start_date, end_date)).fetchall()
         result = []
         for row in rows:
@@ -93,7 +94,7 @@ class Transaction:
         rows = db.execute("""
             SELECT * FROM transactions
             WHERE payment_method = ?
-            ORDER BY date, id
+            ORDER BY date, amount DESC, id
         """, (method,)).fetchall()
         result = []
         for row in rows:
@@ -110,7 +111,7 @@ class Transaction:
         rows = db.execute("""
             SELECT * FROM transactions
             WHERE date >= ?
-            ORDER BY date, id
+            ORDER BY date, amount DESC, id
         """, (from_date,)).fetchall()
         result = []
         for row in rows:
@@ -121,13 +122,20 @@ class Transaction:
 
     @classmethod
     def delete_future_recurring(cls, from_date: str = None):
-        """Delete all future recurring transactions for regeneration"""
+        """Delete all future non-posted transactions for regeneration.
+        This includes:
+        - Transactions linked to recurring charges
+        - Payday transactions (recurring_charge_id is NULL but auto-generated)
+        - LDBPD markers
+        - Lisa payment transactions
+        """
         if from_date is None:
             from_date = datetime.now().strftime('%Y-%m-%d')
         db = Database()
+        # Delete all future non-posted transactions (they are all auto-generated)
         db.execute("""
             DELETE FROM transactions
-            WHERE date >= ? AND recurring_charge_id IS NOT NULL AND is_posted = 0
+            WHERE date >= ? AND is_posted = 0
         """, (from_date,))
         db.commit()
 

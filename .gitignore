@@ -44,5 +44,11 @@ Thumbs.db
 *.xlsx
 *.xls
 
+# Log files
+*.log
+
+# Auto-backup directory
+auto_backups/
+
 # Claude settings
 .claude/

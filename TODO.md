@@ -18,57 +18,57 @@
 - [x] 1.3 Fix input boxes - disable scroll-wheel behavior on spinboxes
 - [x] 1.4 Improve spacing/padding across UI for better visuals
 
-## Phase 2: Core Feature Gaps
+## Phase 2: Core Feature Gaps [COMPLETED]
 *Essential functionality that's currently stubbed out*
 
-- [ ] 2.1 Implement CSV export (`main_window.py:182` - currently shows "not implemented")
-- [ ] 2.2 Implement balance recalculation tool (`main_window.py:272`)
-- [ ] 2.3 Add input validation across all forms (prevent invalid data entry)
+- [x] 2.1 Implement CSV export (File > Export to CSV with table selection and date filtering)
+- [x] 2.2 Implement balance recalculation tool (Tools > Recalculate Balances)
+- [x] 2.3 Add input validation across all forms (TransactionDialog, CreditCardDialog, RecurringChargeDialog)
 
-## Phase 3: Transactions Tab Enhancements
+## Phase 3: Transactions Tab Enhancements [COMPLETED]
 *Most-used view, biggest usability improvements*
 
-- [ ] 3.1 Make column widths user-resizable and persist settings
-- [ ] 3.2 Add show/hide toggle for available balance columns
-- [ ] 3.3 Add show/hide toggle for current balance owed columns
-- [ ] 3.4 Add multi-select dropdown to filter by specific credit cards
-- [ ] 3.5 Add summary row showing total available credit across all cards
-- [ ] 3.6 Show available balance next to amount due for each card
+- [x] 3.1 Make column widths user-resizable and persist settings (QSettings)
+- [x] 3.2 Add show/hide toggle for available balance columns (Columns menu)
+- [x] 3.3 Add show/hide toggle for current balance owed columns (Columns menu)
+- [x] 3.4 Add multi-select dropdown to filter by specific credit cards (Pay Types filter)
+- [x] 3.5 Add summary row showing total available credit across all cards (bottom summary bar)
+- [x] 3.6 Show available balance next to amount due for each card (Owed + Avail columns per card)
 
-## Phase 4: Recurring Charges & Generation Fixes
+## Phase 4: Recurring Charges & Generation Fixes [COMPLETED]
 *Fix logic issues in transaction generation*
 
-- [ ] 4.1 Exclude charges with "Special(###)" due dates from auto-generation
-- [ ] 4.2 Exclude charges already in "Lisa Payments" tab from duplication
-- [ ] 4.3 Make special transaction generation configurable (remove hardcoded dates)
-- [ ] 4.4 Add configurable payday frequency (currently hardcoded to biweekly Friday)
+- [x] 4.1 Exclude charges with "Special(###)" due dates from auto-generation
+- [x] 4.2 Exclude charges already in "Lisa Payments" tab from duplication (via linked_recurring_id)
+- [x] 4.3 Make special transaction generation configurable (uses pay_day_of_week from paycheck config)
+- [x] 4.4 Add configurable payday frequency (pay_day_of_week field added to paycheck config)
 
-## Phase 5: Credit Card Management
+## Phase 5: Credit Card Management [COMPLETED]
 *Better card lifecycle management*
 
-- [ ] 5.1 Add "New Credit Card" dialog with all fields (due date, rate, limit, etc.)
-- [ ] 5.2 On card deletion: prompt to reassign linked charges to another card
-- [ ] 5.3 On card deletion: prompt to transfer or delete payment transactions
+- [x] 5.1 Add "New Credit Card" dialog with all fields (due date, rate, limit, etc.) - already implemented
+- [x] 5.2 On card deletion: prompt to reassign linked charges to another card (CardDeletionDialog)
+- [x] 5.3 On card deletion: prompt to transfer or delete payment transactions (CardDeletionDialog)
 
-## Phase 6: Dashboard Improvements
+## Phase 6: Dashboard Improvements [COMPLETED]
 *Main view enhancements*
 
-- [ ] 6.1 Add column sorting to dashboard tables
-- [ ] 6.2 Implement 90-day minimum balance alerts (from HANDOFF.md priority list)
+- [x] 6.1 Add column sorting to dashboard tables (setSortingEnabled on cards_table and loans_table)
+- [x] 6.2 Implement 90-day minimum balance alerts (already implemented)
 
-## Phase 7: Data Safety & Quality
+## Phase 7: Data Safety & Quality [COMPLETED]
 *Protect user from mistakes*
 
-- [ ] 7.1 Add undo functionality for destructive actions
-- [ ] 7.2 Add confirmation dialogs for bulk operations
-- [ ] 7.3 Improve Excel import error handling with detailed feedback
+- [x] 7.1 Add undo functionality for destructive actions (auto-backup system with Ctrl+Z restore)
+- [x] 7.2 Add confirmation dialogs for bulk operations (Excel import, balance updates, generate transactions)
+- [x] 7.3 Improve Excel import error handling with detailed feedback (ImportResult with warnings)
 
-## Phase 8: Project Infrastructure
+## Phase 8: Project Infrastructure [COMPLETED]
 *Code quality and maintainability*
 
-- [ ] 8.1 Add logging system for debugging
-- [ ] 8.2 Create unit tests for models and calculations
-- [ ] 8.3 Create pyproject.toml for proper packaging
+- [x] 8.1 Add logging system for debugging (logging_config.py module)
+- [x] 8.2 Create unit tests for models and calculations (25 tests in tests/)
+- [x] 8.3 Create pyproject.toml for proper packaging
 
 ## Phase 9: Advanced Features (Future)
 *Nice-to-have, significant effort*
