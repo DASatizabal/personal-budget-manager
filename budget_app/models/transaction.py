@@ -9,12 +9,13 @@ from .database import Database
 @dataclass
 class Transaction:
     id: Optional[int]
-    date: str  # ISO format: YYYY-MM-DD
+    date: str  # ISO format: YYYY-MM-DD (due date)
     description: str
     amount: float
     payment_method: str
     recurring_charge_id: Optional[int] = None
     is_posted: bool = False
+    posted_date: Optional[str] = None  # ISO format: YYYY-MM-DD (when marked as posted)
     notes: Optional[str] = None
 
     @property
@@ -27,19 +28,19 @@ class Transaction:
         if self.id is None:
             cursor = db.execute("""
                 INSERT INTO transactions
-                (date, description, amount, payment_method, recurring_charge_id, is_posted, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                (date, description, amount, payment_method, recurring_charge_id, is_posted, posted_date, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (self.date, self.description, self.amount, self.payment_method,
-                  self.recurring_charge_id, int(self.is_posted), self.notes))
+                  self.recurring_charge_id, int(self.is_posted), self.posted_date, self.notes))
             self.id = cursor.lastrowid
         else:
             db.execute("""
                 UPDATE transactions SET
                 date = ?, description = ?, amount = ?, payment_method = ?,
-                recurring_charge_id = ?, is_posted = ?, notes = ?
+                recurring_charge_id = ?, is_posted = ?, posted_date = ?, notes = ?
                 WHERE id = ?
             """, (self.date, self.description, self.amount, self.payment_method,
-                  self.recurring_charge_id, int(self.is_posted), self.notes, self.id))
+                  self.recurring_charge_id, int(self.is_posted), self.posted_date, self.notes, self.id))
         db.commit()
         return self
 
@@ -150,3 +151,29 @@ class Transaction:
             WHERE payment_method = ? AND date <= ?
         """, (payment_method, up_to_date)).fetchone()
         return starting_balance + (result[0] or 0)
+
+    @classmethod
+    def get_posted(cls) -> List['Transaction']:
+        """Get all posted transactions, ordered by posted_date descending"""
+        db = Database()
+        rows = db.execute("""
+            SELECT * FROM transactions
+            WHERE is_posted = 1
+            ORDER BY posted_date DESC, date DESC, id DESC
+        """).fetchall()
+        result = []
+        for row in rows:
+            data = dict(row)
+            data['is_posted'] = bool(data['is_posted'])
+            result.append(cls(**data))
+        return result
+
+    @classmethod
+    def clear_posted(cls) -> int:
+        """Delete all posted transactions. Returns count of deleted transactions."""
+        db = Database()
+        result = db.execute("SELECT COUNT(*) FROM transactions WHERE is_posted = 1").fetchone()
+        count = result[0] if result else 0
+        db.execute("DELETE FROM transactions WHERE is_posted = 1")
+        db.commit()
+        return count

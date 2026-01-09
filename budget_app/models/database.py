@@ -178,6 +178,13 @@ def init_db():
         _logger.info("Running migration: Adding pay_day_of_week column")
         db.execute("ALTER TABLE paycheck_configs ADD COLUMN pay_day_of_week INTEGER NOT NULL DEFAULT 4")
 
+    # Migration: Add posted_date column to transactions if not exists
+    try:
+        db.execute("SELECT posted_date FROM transactions LIMIT 1")
+    except Exception:
+        _logger.info("Running migration: Adding posted_date column to transactions")
+        db.execute("ALTER TABLE transactions ADD COLUMN posted_date TEXT")
+
     db.commit()
     _logger.info("Database initialized successfully")
     return db

@@ -186,6 +186,18 @@ def generate_future_transactions(months_ahead: int = 12,
     # Get paycheck config for payday transactions
     paycheck = PaycheckConfig.get_current()
 
+    # Build set of already-posted transactions to avoid duplicating
+    # Key: (recurring_charge_id, date) for recurring charges
+    # Key: (description, date) for non-recurring (payday, lisa, etc.)
+    posted = Transaction.get_posted()
+    posted_recurring = set()
+    posted_other = set()
+    for p in posted:
+        if p.recurring_charge_id:
+            posted_recurring.add((p.recurring_charge_id, p.date[:10]))
+        else:
+            posted_other.add((p.description, p.date[:10]))
+
     transactions = []
     current_date = start_date
 
@@ -205,9 +217,15 @@ def generate_future_transactions(months_ahead: int = 12,
 
             # Check if this charge occurs on this day
             if charge.day_of_month == day:
+                date_str = current_date.strftime('%Y-%m-%d')
+
+                # Skip if this charge+date is already posted
+                if (charge.id, date_str) in posted_recurring:
+                    continue
+
                 trans = Transaction(
                     id=None,
-                    date=current_date.strftime('%Y-%m-%d'),
+                    date=date_str,
                     description=charge.name,
                     amount=charge.get_actual_amount(),
                     payment_method=charge.payment_method,
@@ -220,14 +238,14 @@ def generate_future_transactions(months_ahead: int = 12,
 
     # Handle special charges (mortgage on specific schedule, etc.)
     # Also skip Lisa-linked charges
-    transactions.extend(_generate_special_charges(start_date, end_date, charges, lisa_linked_ids))
+    transactions.extend(_generate_special_charges(start_date, end_date, charges, lisa_linked_ids, posted_recurring))
 
     # Generate payday transactions
     if paycheck:
-        transactions.extend(_generate_payday_transactions(start_date, end_date, paycheck))
+        transactions.extend(_generate_payday_transactions(start_date, end_date, paycheck, posted_other))
 
     # Generate credit card interest charges
-    transactions = _generate_interest_charges(start_date, end_date, transactions)
+    transactions = _generate_interest_charges(start_date, end_date, transactions, posted_other)
 
     # Sort by date
     transactions.sort(key=lambda x: x.date)
@@ -237,12 +255,15 @@ def generate_future_transactions(months_ahead: int = 12,
 
 def _generate_special_charges(start_date: date, end_date: date,
                               charges: List[RecurringCharge],
-                              lisa_linked_ids: set = None) -> List[Transaction]:
+                              lisa_linked_ids: set = None,
+                              posted_recurring: set = None) -> List[Transaction]:
     """Generate transactions for special frequency charges"""
     transactions = []
 
     if lisa_linked_ids is None:
         lisa_linked_ids = set()
+    if posted_recurring is None:
+        posted_recurring = set()
 
     special_charges = [c for c in charges if c.frequency == 'SPECIAL']
 
@@ -273,27 +294,12 @@ def _generate_special_charges(start_date: date, end_date: date,
                 if current > end_date:
                     break
 
-                # Every other Friday
-                trans = Transaction(
-                    id=None,
-                    date=current.strftime('%Y-%m-%d'),
-                    description=charge.name,
-                    amount=charge.amount,
-                    payment_method='C',
-                    recurring_charge_id=charge.id,
-                    is_posted=False
-                )
-                transactions.append(trans)
-                current += timedelta(days=14)
-
-        elif charge.day_of_month in [992, 993, 994, 995]:
-            # Monthly special charges - treat as monthly on the 15th
-            current = date(start_date.year, start_date.month, 15)
-            while current <= end_date:
-                if current >= start_date:
+                date_str = current.strftime('%Y-%m-%d')
+                # Skip if already posted
+                if (charge.id, date_str) not in posted_recurring:
                     trans = Transaction(
                         id=None,
-                        date=current.strftime('%Y-%m-%d'),
+                        date=date_str,
                         description=charge.name,
                         amount=charge.amount,
                         payment_method='C',
@@ -301,6 +307,26 @@ def _generate_special_charges(start_date: date, end_date: date,
                         is_posted=False
                     )
                     transactions.append(trans)
+                current += timedelta(days=14)
+
+        elif charge.day_of_month in [992, 993, 994, 995]:
+            # Monthly special charges - treat as monthly on the 15th
+            current = date(start_date.year, start_date.month, 15)
+            while current <= end_date:
+                if current >= start_date:
+                    date_str = current.strftime('%Y-%m-%d')
+                    # Skip if already posted
+                    if (charge.id, date_str) not in posted_recurring:
+                        trans = Transaction(
+                            id=None,
+                            date=date_str,
+                            description=charge.name,
+                            amount=charge.amount,
+                            payment_method='C',
+                            recurring_charge_id=charge.id,
+                            is_posted=False
+                        )
+                        transactions.append(trans)
 
                 # Move to next month
                 if current.month == 12:
@@ -312,12 +338,16 @@ def _generate_special_charges(start_date: date, end_date: date,
 
 
 def _generate_payday_transactions(start_date: date, end_date: date,
-                                  paycheck: PaycheckConfig) -> List[Transaction]:
+                                  paycheck: PaycheckConfig,
+                                  posted_other: set = None) -> List[Transaction]:
     """Generate payday transactions based on paycheck configuration"""
     from ..models.shared_expense import SharedExpense
     import calendar
 
     transactions = []
+
+    if posted_other is None:
+        posted_other = set()
 
     if paycheck.pay_frequency == 'BIWEEKLY':
         # To correctly count paydays per month, we need to start from the
@@ -346,27 +376,30 @@ def _generate_payday_transactions(start_date: date, end_date: date,
 
         # Generate transactions for each payday
         for payday in paydays:
-            # Payday transaction
-            trans = Transaction(
-                id=None,
-                date=payday.strftime('%Y-%m-%d'),
-                description='Payday',
-                amount=paycheck.net_pay,
-                payment_method='C',
-                recurring_charge_id=None,
-                is_posted=False
-            )
-            transactions.append(trans)
+            date_str = payday.strftime('%Y-%m-%d')
+
+            # Payday transaction - skip if already posted
+            if ('Payday', date_str) not in posted_other:
+                trans = Transaction(
+                    id=None,
+                    date=date_str,
+                    description='Payday',
+                    amount=paycheck.net_pay,
+                    payment_method='C',
+                    recurring_charge_id=None,
+                    is_posted=False
+                )
+                transactions.append(trans)
 
             # Lisa payment - based on number of paydays in this month
             month_key = (payday.year, payday.month)
             paycheck_count = paydays_per_month.get(month_key, 2)
             lisa_amount = SharedExpense.calculate_lisa_payment(paycheck_count)
 
-            if lisa_amount > 0:
+            if lisa_amount > 0 and ('Lisa Payment', date_str) not in posted_other:
                 lisa_trans = Transaction(
                     id=None,
-                    date=payday.strftime('%Y-%m-%d'),
+                    date=date_str,
                     description='Lisa Payment',
                     amount=-lisa_amount,  # Negative because it's an expense
                     payment_method='C',
@@ -377,10 +410,11 @@ def _generate_payday_transactions(start_date: date, end_date: date,
 
             # Add LDBPD marker (Last Day Before PayDay)
             ldbpd_date = payday - timedelta(days=1)
-            if ldbpd_date >= start_date:
+            ldbpd_date_str = ldbpd_date.strftime('%Y-%m-%d')
+            if ldbpd_date >= start_date and ('LDBPD', ldbpd_date_str) not in posted_other:
                 ldbpd = Transaction(
                     id=None,
-                    date=ldbpd_date.strftime('%Y-%m-%d') + ' 23:59:59',
+                    date=ldbpd_date_str + ' 23:59:59',
                     description='LDBPD',
                     amount=0,
                     payment_method='C',
@@ -394,12 +428,16 @@ def _generate_payday_transactions(start_date: date, end_date: date,
 
 
 def _generate_interest_charges(start_date: date, end_date: date,
-                                transactions: List[Transaction]) -> List[Transaction]:
+                                transactions: List[Transaction],
+                                posted_other: set = None) -> List[Transaction]:
     """
     Generate interest charges for credit cards.
     Interest is charged 3 days after due date, based on previous day's balance.
     """
     import calendar
+
+    if posted_other is None:
+        posted_other = set()
 
     # Get credit cards with interest rate and due day
     cards = [c for c in CreditCard.get_all() if c.interest_rate > 0 and c.due_day]
@@ -478,12 +516,15 @@ def _generate_interest_charges(start_date: date, end_date: date,
                 # Monthly interest = balance * (APR / 12)
                 monthly_rate = card.interest_rate / 12
                 interest_amount = round(card_balance * monthly_rate, 2)
+                interest_date_str = interest_date.strftime('%Y-%m-%d')
+                interest_desc = f"{card.name} Interest"
 
-                if interest_amount > 0:
+                # Skip if already posted
+                if interest_amount > 0 and (interest_desc, interest_date_str) not in posted_other:
                     interest_trans = Transaction(
                         id=None,
-                        date=interest_date.strftime('%Y-%m-%d'),
-                        description=f"{card.name} Interest",
+                        date=interest_date_str,
+                        description=interest_desc,
                         amount=interest_amount,
                         payment_method=card.pay_type_code,
                         recurring_charge_id=None,

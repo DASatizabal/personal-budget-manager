@@ -65,6 +65,11 @@ class TransactionsView(QWidget):
         generate_btn.clicked.connect(self._generate_recurring_transactions)
         toolbar.addWidget(generate_btn)
 
+        clear_posted_btn = QPushButton("Clear Posted")
+        clear_posted_btn.setToolTip("Remove all posted transactions (moves them to Posted tab)")
+        clear_posted_btn.clicked.connect(self._clear_posted_transactions)
+        toolbar.addWidget(clear_posted_btn)
+
         toolbar.addStretch()
 
         # Date filter
@@ -186,8 +191,8 @@ class TransactionsView(QWidget):
 
     def _setup_table_columns(self):
         """Set up table columns dynamically based on available cards"""
-        # Base columns
-        self._base_columns = ["Date", "Pay Type", "Description", "Amount", "Chase Balance"]
+        # Base columns - checkbox column first (checkmark symbol as header)
+        self._base_columns = ["\u2713", "Date", "Pay Type", "Description", "Amount", "Chase Balance"]
         columns = self._base_columns.copy()
 
         # Add columns for each credit card (both Owed and Avail)
@@ -215,6 +220,7 @@ class TransactionsView(QWidget):
 
         # Set default column widths
         default_widths = {
+            "\u2713": 35,
             "Date": 90,
             "Pay Type": 70,
             "Description": 200,
@@ -238,6 +244,9 @@ class TransactionsView(QWidget):
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.doubleClicked.connect(self._edit_transaction)
+
+        # Connect checkbox changes to handler
+        self.table.itemChanged.connect(self._on_item_changed)
 
         # Set up the columns visibility menu
         self._setup_columns_menu()
@@ -446,6 +455,7 @@ class TransactionsView(QWidget):
 
         # Set default column widths
         default_widths = {
+            "\u2713": 35,
             "Date": 90,
             "Pay Type": 70,
             "Description": 200,
@@ -575,15 +585,15 @@ class TransactionsView(QWidget):
         for row in range(self.table.rowCount()):
             show_row = True
 
-            # Description filter (column 2)
+            # Description filter (column 3)
             if desc_filter:
-                desc_item = self.table.item(row, 2)
+                desc_item = self.table.item(row, 3)
                 if desc_item and desc_filter not in desc_item.text().lower():
                     show_row = False
 
-            # Amount filter (column 3)
+            # Amount filter (column 4)
             if show_row and (amount_min is not None or amount_max is not None or sign_filter != 0):
-                amount_item = self.table.item(row, 3)
+                amount_item = self.table.item(row, 4)
                 if amount_item:
                     try:
                         amount_text = amount_item.text().replace('$', '').replace(',', '').strip()
@@ -649,8 +659,10 @@ class TransactionsView(QWidget):
             from_date = self.from_date.date().toString("yyyy-MM-dd")
             to_date = self.to_date.date().toString("yyyy-MM-dd")
 
-            # Get transactions
+            # Get transactions (only non-posted for planning view)
             all_transactions = Transaction.get_by_date_range(from_date, to_date)
+            # Filter out posted transactions - they appear in the Posted tab
+            all_transactions = [t for t in all_transactions if not t.is_posted]
 
             # Filter by selected payment types
             selected_pay_types = self._get_selected_pay_types()
@@ -715,21 +727,28 @@ class TransactionsView(QWidget):
                 total_balance = sum(running.get(c.pay_type_code, 0) for c in cards)
                 utilization = total_balance / total_limit if total_limit > 0 else 0
 
+                # Posted checkbox (column 0)
+                checkbox_item = QTableWidgetItem()
+                checkbox_item.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+                checkbox_item.setCheckState(Qt.CheckState.Checked if trans.is_posted else Qt.CheckState.Unchecked)
+                checkbox_item.setData(Qt.ItemDataRole.UserRole, trans.id)  # Store transaction ID
+                self.table.setItem(row, 0, checkbox_item)
+
                 # Date - convert from YYYY-MM-DD to MM/DD/YYYY for display
                 iso_date = trans.date[:10]
                 display_date = f"{iso_date[5:7]}/{iso_date[8:10]}/{iso_date[:4]}"
                 date_item = QTableWidgetItem(display_date)
-                self.table.setItem(row, 0, date_item)
+                self.table.setItem(row, 1, date_item)
 
                 # Pay Type
-                self.table.setItem(row, 1, QTableWidgetItem(trans.payment_method))
+                self.table.setItem(row, 2, QTableWidgetItem(trans.payment_method))
 
                 # Description - highlight recurring transactions
                 desc_item = QTableWidgetItem(trans.description)
                 desc_item.setData(Qt.ItemDataRole.UserRole, trans.id)
                 if trans.recurring_charge_id:
                     desc_item.setForeground(QColor("#64b5f6"))
-                self.table.setItem(row, 2, desc_item)
+                self.table.setItem(row, 3, desc_item)
 
                 # Amount
                 amount_item = QTableWidgetItem(f"${trans.amount:,.2f}")
@@ -737,7 +756,7 @@ class TransactionsView(QWidget):
                     amount_item.setForeground(QColor("#f44336"))
                 else:
                     amount_item.setForeground(QColor("#4caf50"))
-                self.table.setItem(row, 3, amount_item)
+                self.table.setItem(row, 4, amount_item)
 
                 # Chase Balance
                 chase_balance = running.get('C', 0)
@@ -746,7 +765,7 @@ class TransactionsView(QWidget):
                     chase_item.setForeground(QColor("#f44336"))
                 elif chase_balance < 500:
                     chase_item.setForeground(QColor("#ff9800"))
-                self.table.setItem(row, 4, chase_item)
+                self.table.setItem(row, 5, chase_item)
 
                 # Credit card Owed and Available columns
                 for i, code in enumerate(card_codes):
@@ -759,7 +778,7 @@ class TransactionsView(QWidget):
                         owed_item.setForeground(QColor("#f44336"))
                     elif owed > card_limits.get(code, 0) * 0.8:
                         owed_item.setForeground(QColor("#ff9800"))
-                    self.table.setItem(row, 5 + (i * 2), owed_item)
+                    self.table.setItem(row, 6 + (i * 2), owed_item)
 
                     # Avail column
                     avail_item = QTableWidgetItem(f"${avail:,.2f}")
@@ -767,10 +786,10 @@ class TransactionsView(QWidget):
                         avail_item.setForeground(QColor("#f44336"))
                     elif avail < 100:
                         avail_item.setForeground(QColor("#ff9800"))
-                    self.table.setItem(row, 5 + (i * 2) + 1, avail_item)
+                    self.table.setItem(row, 6 + (i * 2) + 1, avail_item)
 
                 # Utilization (after all card columns)
-                util_col = 5 + (len(card_codes) * 2)
+                util_col = 6 + (len(card_codes) * 2)
                 util_item = QTableWidgetItem(f"{utilization * 100:.1f}%")
                 if utilization > 0.8:
                     util_item.setForeground(QColor("#f44336"))
@@ -1059,13 +1078,114 @@ class TransactionsView(QWidget):
         # If 5 Fridays, likely 3 paydays; if 4, likely 2
         return 3 if count >= 5 else 2
 
+    def _on_item_changed(self, item: QTableWidgetItem):
+        """Handle item changes - specifically checkbox state changes"""
+        # Only process checkbox column (column 0)
+        if item.column() != 0:
+            return
+
+        # Get transaction ID from the item's user data
+        trans_id = item.data(Qt.ItemDataRole.UserRole)
+        if not trans_id:
+            return
+
+        # Determine new posted state from checkbox
+        is_posted = item.checkState() == Qt.CheckState.Checked
+
+        # Update transaction in database
+        trans = Transaction.get_by_id(trans_id)
+        if trans and trans.is_posted != is_posted:
+            # Set posted_date when marking as posted
+            if is_posted:
+                trans.posted_date = datetime.now().strftime('%Y-%m-%d')
+                # Update account/card balances
+                self._update_balances_for_posted_transaction(trans)
+            else:
+                trans.posted_date = None
+                # Reverse the balance updates
+                self._reverse_balances_for_unposted_transaction(trans)
+
+            trans.is_posted = is_posted
+            trans.save()
+
+            # Notify parent window to refresh dashboard
+            self._notify_balance_change()
+
+    def _update_balances_for_posted_transaction(self, trans: Transaction):
+        """Update account/card balances when a transaction is marked as posted"""
+        from ..models.account import Account
+        from ..models.credit_card import CreditCard
+
+        # Update the primary account/card (payment_method)
+        if trans.payment_method == 'C':
+            # Chase (checking account)
+            account = Account.get_by_code('C')
+            if account:
+                account.current_balance += trans.amount
+                account.save()
+        else:
+            # Credit card - the transaction is a charge TO the card
+            card = CreditCard.get_by_code(trans.payment_method)
+            if card:
+                card.current_balance += trans.amount
+                card.save()
+
+        # If this is a CC payment from Chase, also update the linked card
+        if trans.recurring_charge_id and trans.payment_method == 'C':
+            charge = RecurringCharge.get_by_id(trans.recurring_charge_id)
+            if charge and charge.linked_card_id:
+                linked_card = CreditCard.get_by_id(charge.linked_card_id)
+                if linked_card:
+                    # Payment reduces the CC balance (trans.amount is negative, so this reduces debt)
+                    linked_card.current_balance += trans.amount
+                    linked_card.save()
+
+    def _reverse_balances_for_unposted_transaction(self, trans: Transaction):
+        """Reverse balance updates when a transaction is unmarked as posted"""
+        from ..models.account import Account
+        from ..models.credit_card import CreditCard
+
+        # Reverse the primary account/card update
+        if trans.payment_method == 'C':
+            account = Account.get_by_code('C')
+            if account:
+                account.current_balance -= trans.amount
+                account.save()
+        else:
+            card = CreditCard.get_by_code(trans.payment_method)
+            if card:
+                card.current_balance -= trans.amount
+                card.save()
+
+        # Reverse linked CC update if applicable
+        if trans.recurring_charge_id and trans.payment_method == 'C':
+            charge = RecurringCharge.get_by_id(trans.recurring_charge_id)
+            if charge and charge.linked_card_id:
+                linked_card = CreditCard.get_by_id(charge.linked_card_id)
+                if linked_card:
+                    linked_card.current_balance -= trans.amount
+                    linked_card.save()
+
+    def _notify_balance_change(self):
+        """Notify parent window that balances have changed"""
+        # Find main window and refresh dashboard and posted views
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, 'dashboard_view'):
+                parent.dashboard_view.mark_dirty()
+            if hasattr(parent, 'posted_transactions_view'):
+                parent.posted_transactions_view.mark_dirty()
+                break
+            parent = parent.parent()
+
     def _get_selected_transaction_id(self) -> int:
         """Get the ID of the selected transaction"""
         selected = self.table.selectedItems()
         if not selected:
             return None
         row = selected[0].row()
-        return self.table.item(row, 2).data(Qt.ItemDataRole.UserRole)
+        # Transaction ID is stored in column 3 (Description) or column 0 (Checkbox)
+        return self.table.item(row, 3).data(Qt.ItemDataRole.UserRole)
 
     def _add_transaction(self):
         """Add a new transaction"""
@@ -1148,6 +1268,44 @@ class TransactionsView(QWidget):
                 QMessageBox.information(self, "Deleted", f"Deleted {count} transactions.")
                 self.mark_dirty()
                 self.refresh()
+
+    def _clear_posted_transactions(self):
+        """Clear all posted transactions from the Transactions view"""
+        # Get count of posted transactions
+        posted = Transaction.get_posted()
+        count = len(posted)
+
+        if count == 0:
+            QMessageBox.information(
+                self,
+                "No Posted Transactions",
+                "There are no posted transactions to clear.\n\n"
+                "Use the checkbox column to mark transactions as posted."
+            )
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Clear Posted Transactions",
+            f"This will remove {count} posted transaction(s) from this view.\n\n"
+            "They will still be available in the 'Posted' tab.\n\n"
+            "Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            # Posted transactions are already marked - just refresh to hide them
+            # The Posted tab shows is_posted=True, Transactions tab shows is_posted=False
+            self.mark_dirty()
+            self.refresh()
+            # Notify Posted tab to refresh
+            self._notify_balance_change()
+            QMessageBox.information(
+                self,
+                "Cleared",
+                f"Cleared {count} posted transaction(s).\n\n"
+                "View them in the 'Posted' tab."
+            )
 
 
 class GenerateRecurringDialog(QDialog):

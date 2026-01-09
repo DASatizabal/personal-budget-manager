@@ -13,6 +13,7 @@ from .dashboard_view import DashboardView
 from .credit_cards_view import CreditCardsView
 from .recurring_charges_view import RecurringChargesView
 from .transactions_view import TransactionsView
+from .posted_transactions_view import PostedTransactionsView
 from .paycheck_view import PaycheckView
 from .shared_expenses_view import SharedExpensesView
 from ..models.database import init_db
@@ -49,12 +50,14 @@ class MainWindow(QMainWindow):
         self.credit_cards_view = CreditCardsView()
         self.recurring_view = RecurringChargesView()
         self.transactions_view = TransactionsView()
+        self.posted_transactions_view = PostedTransactionsView()
         self.paycheck_view = PaycheckView()
         self.shared_expenses_view = SharedExpensesView()
 
         # Add tabs
         self.tabs.addTab(self.dashboard_view, "Dashboard")
         self.tabs.addTab(self.transactions_view, "Transactions")
+        self.tabs.addTab(self.posted_transactions_view, "Posted")
         self.tabs.addTab(self.credit_cards_view, "Credit Cards")
         self.tabs.addTab(self.recurring_view, "Recurring Charges")
         self.tabs.addTab(self.paycheck_view, "Paycheck")

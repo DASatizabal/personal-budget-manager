@@ -23,6 +23,7 @@ class DashboardView(QWidget):
 
     def __init__(self):
         super().__init__()
+        self._data_dirty = True
         self._setup_ui()
         self.refresh()
 
@@ -124,8 +125,13 @@ class DashboardView(QWidget):
 
         layout.addWidget(loans_group)
 
+    def mark_dirty(self):
+        """Mark data as dirty so next refresh reloads from database"""
+        self._data_dirty = True
+
     def refresh(self):
         """Refresh all dashboard data"""
+        self._data_dirty = False
         self._update_accounts()
         self._update_90_day_alert()
         self._update_credit_cards()
