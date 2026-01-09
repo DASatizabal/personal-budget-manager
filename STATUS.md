@@ -70,6 +70,20 @@ Replace Excel-based budget tracking with a Python desktop application. Currently
 - **CC ↔ Recurring Charge Sync**: Credit cards now auto-sync linked recurring charges on save (updates day_of_month to match due_day, sets amount_type to CALCULATED).
 - **Recurring Charges Display**: Now shows actual calculated amounts and due days from linked credit cards.
 - **BJs Fix**: Payment date corrected from day 5 to day 2 (matches credit card due_day).
+- **Auto-create Recurring Charge**: New credit cards now automatically create linked recurring charge for payment tracking.
+- **Missing CC Payments Fixed**: Created recurring charges for MicroCenter, Wyndham, Zales (were missing payment transactions).
+
+## Session 2026-01-09 (Part 2) - Posted Transactions Feature
+- **Checkbox Column**: Added checkmark column to Transactions tab for marking transactions as posted
+- **Balance Updates on Post**: When checking a transaction as posted:
+  - Updates Chase account balance for bank transactions
+  - Updates credit card balance for CC charges
+  - For CC payments from Chase, also reduces the linked card's balance
+- **Posted Date Tracking**: New `posted_date` field records when transaction was marked as posted
+- **Posted Tab**: New tab showing all posted transactions with Due Date, Posted Date, Pay Type, Description, Amount
+- **Clear Posted Button**: Removes posted transactions from Transactions view (moves to Posted tab)
+- **Skip Posted on Generate**: Recurring transaction generation now skips already-posted transactions to prevent duplicates
+- **"Dirty" Pattern**: Dashboard and Posted views use mark_dirty() pattern for efficient lazy refresh
 
 ## What's Next (Phase 9 - Future/Advanced)
 Phase 9 contains advanced features for future development:
@@ -97,6 +111,7 @@ First run: Use File > Import from Excel to load data from your Excel workbook.
 | `main.py` | Application entry point |
 | `budget_app/views/dashboard_view.py` | Main dashboard with balance editing |
 | `budget_app/views/transactions_view.py` | Transaction ledger with recurring generation |
+| `budget_app/views/posted_transactions_view.py` | Posted transactions history view |
 | `budget_app/views/widgets.py` | Custom no-scroll spinbox widgets |
 | `budget_app/utils/excel_import.py` | Excel data import |
 | `budget_app/utils/calculations.py` | Running balance & projection calculations |
