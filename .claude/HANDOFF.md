@@ -6,7 +6,7 @@
 Personal Budget Manager - a Python/PyQt6 desktop app replacing an Excel-based financial tracking system. Tracks bank accounts, 11 credit cards, 2 401k loans, recurring charges, and projects future cash flow.
 
 ## Current State
-**Phase 8 Complete** - All core phases complete including infrastructure. GitHub repo created.
+**Phase 8.5 Complete** - All core phases complete + Posted transactions feature. GitHub repo created.
 
 Working features:
 - Excel import from `Budget v2 Claude.xlsx`
@@ -26,8 +26,9 @@ Working features:
 - **Phase 6 features:** Dashboard table sorting, 90-day balance alerts
 - **Phase 7 features:** Auto-backup/undo system, confirmation dialogs, detailed import error handling
 - **Phase 8 features:** Logging system, 25 unit tests, pyproject.toml packaging
+- **Phase 8.5 features:** Posted transactions tab, checkbox posting, balance updates on post, skip posted on generate
 - **Session 2026-01-08 fixes:** CC min payment, transaction sorting (positive first), payday anchor date, delete all non-posted, Delete All button
-- **Session 2026-01-09 fixes:** Lisa payment 3-payday month calculation, duplicate shared expense prevention, CC↔recurring charge auto-sync
+- **Session 2026-01-09 fixes:** Lisa payment 3-payday month calculation, duplicate shared expense prevention, CC↔recurring charge auto-sync, auto-create recurring charge for new CC
 
 ## Key Constraints
 - **Local only** - no cloud/server, SQLite database
@@ -55,9 +56,12 @@ windsurf-project/
 ├── requirements.txt        # PyQt6, pandas, openpyxl
 ├── pyproject.toml          # Python packaging configuration
 ├── budget_app/
-│   ├── models/            # SQLite models (database.py, credit_card.py, etc.)
-│   ├── views/             # PyQt6 UI (dashboard_view.py, transactions_view.py, etc.)
-│   │   └── widgets.py     # Custom NoScrollSpinBox widgets
+│   ├── models/            # SQLite models (database.py, credit_card.py, transaction.py, etc.)
+│   ├── views/             # PyQt6 UI
+│   │   ├── dashboard_view.py           # Main dashboard with balance editing
+│   │   ├── transactions_view.py        # Transaction ledger (planning view)
+│   │   ├── posted_transactions_view.py # Posted transactions (history view)
+│   │   └── widgets.py                  # Custom NoScrollSpinBox widgets
 │   ├── utils/             # excel_import.py, calculations.py, csv_export.py
 │   │   ├── backup.py      # Auto-backup and restore utilities
 │   │   └── logging_config.py  # Logging configuration
@@ -66,7 +70,7 @@ windsurf-project/
 │   ├── test_calculations.py
 │   └── test_models.py
 ├── STATUS.md              # Current project status
-├── TODO.md                # Prioritized backlog (9 phases)
+├── TODO.md                # Prioritized backlog (phases 1-9)
 ├── DECISIONS.md           # Architecture decisions log
 └── .claude/HANDOFF.md     # This file
 ```

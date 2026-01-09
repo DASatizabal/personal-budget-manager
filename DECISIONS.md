@@ -47,3 +47,19 @@ Added `_sync_linked_recurring_charges()` to `CreditCard.save()`. When a credit c
 
 ## 2026-01-09: CALCULATED amount_type for credit card payments
 Added `CALCULATED` as an alias for `CREDIT_CARD_BALANCE` in `RecurringCharge.get_actual_amount()`. Both types pull the `min_payment` from the linked credit card. CALCULATED is the default for CC-linked charges.
+
+## 2026-01-09: Auto-create recurring charge for new credit cards
+When a new credit card is saved with a `due_day`, automatically create a linked recurring charge for payment tracking. This ensures all credit cards generate payment transactions without manual setup. Uses payment_method='C' (Chase), amount_type='CALCULATED'.
+
+## 2026-01-09: Posted transactions as separate workflow
+Implemented a two-tab model: "Transactions" for planning/projection, "Posted" for reality/history. When a transaction is marked as posted:
+1. `posted_date` is set to today
+2. Account balances are updated immediately (Chase and/or linked CC)
+3. Transaction is filtered out of Transactions tab (shows only `is_posted=False`)
+4. Transaction appears in Posted tab (shows only `is_posted=True`)
+
+## 2026-01-09: mark_dirty() pattern for lazy refresh
+Dashboard and Posted views use a `_data_dirty` flag pattern. Instead of refreshing immediately when data changes elsewhere, views are marked dirty and only refresh when the user actually switches to that tab. Improves performance by avoiding unnecessary database queries on hidden views.
+
+## 2026-01-09: Skip posted transactions on generate
+When generating recurring transactions, build a set of already-posted (recurring_charge_id, date) pairs and skip any matches. For non-recurring transactions (Payday, Lisa Payment, Interest), check (description, date) pairs. Prevents duplicates when regenerating after posting some transactions.

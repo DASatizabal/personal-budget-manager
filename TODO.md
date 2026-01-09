@@ -70,6 +70,17 @@
 - [x] 8.2 Create unit tests for models and calculations (25 tests in tests/)
 - [x] 8.3 Create pyproject.toml for proper packaging
 
+## Phase 8.5: Posted Transactions [COMPLETED]
+*Track real vs projected transactions*
+
+- [x] 8.5.1 Add checkbox column to mark transactions as posted
+- [x] 8.5.2 Update account/CC balances when marking transaction as posted
+- [x] 8.5.3 Add posted_date field to track when transaction was posted
+- [x] 8.5.4 Create "Posted" tab showing posted transaction history
+- [x] 8.5.5 Add "Clear Posted" button to remove posted items from Transactions view
+- [x] 8.5.6 Skip already-posted transactions when regenerating recurring charges
+- [x] 8.5.7 Auto-create recurring charge when adding new credit card
+
 ## Phase 9: Advanced Features (Future)
 *Nice-to-have, significant effort*
 
