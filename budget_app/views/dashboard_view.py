@@ -15,7 +15,7 @@ from ..models.account import Account
 from ..models.credit_card import CreditCard
 from ..models.loan import Loan
 from ..models.transaction import Transaction
-from ..utils.calculations import calculate_90_day_minimum, get_starting_balances
+from ..utils.calculations import find_first_negative_balance, get_starting_balances
 
 
 class DashboardView(QWidget):
@@ -220,7 +220,7 @@ class DashboardView(QWidget):
             self.refresh()
 
     def _update_90_day_alert(self):
-        """Update 90-day minimum balance alert"""
+        """Update 90-day minimum balance alert - shows first negative balance date"""
         checking = Account.get_checking_account()
         if not checking:
             self.min_balance_label.setText("N/A")
@@ -228,31 +228,24 @@ class DashboardView(QWidget):
             return
 
         transactions = Transaction.get_future_transactions()
-        min_balance, min_date = calculate_90_day_minimum(
+        neg_balance, neg_date = find_first_negative_balance(
             checking.current_balance,
             transactions,
             payment_method='C'
         )
 
-        self.min_balance_label.setText(f"${min_balance:,.2f}")
-
-        # Format date as MM/DD/YYYY for display
-        date_str = min_date.strftime("%m/%d/%Y") if min_date else None
-
-        if min_balance < 0:
+        if neg_balance is not None and neg_date is not None:
+            # Found a negative balance
+            date_str = neg_date.strftime("%m/%d/%Y")
+            self.min_balance_label.setText(f"${neg_balance:,.2f}")
             self.min_balance_label.setStyleSheet("color: #f44336;")
-            self.min_date_label.setText(f"WARNING: Negative balance on {date_str}")
+            self.min_date_label.setText(f"First negative on {date_str}")
             self.min_date_label.setStyleSheet("color: #f44336;")
-        elif min_balance < 500:
-            self.min_balance_label.setStyleSheet("color: #ff9800;")
-            self.min_date_label.setText(f"Low balance expected on {date_str}")
-            self.min_date_label.setStyleSheet("color: #ff9800;")
         else:
+            # Balance stays positive
+            self.min_balance_label.setText("No negative balance")
             self.min_balance_label.setStyleSheet("color: #4caf50;")
-            if date_str:
-                self.min_date_label.setText(f"Minimum occurs on {date_str}")
-            else:
-                self.min_date_label.setText("Balance stays stable")
+            self.min_date_label.setText("Chase balance stays positive")
             self.min_date_label.setStyleSheet("color: #d4d4d4;")
 
     def _update_credit_cards(self):

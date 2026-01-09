@@ -64,6 +64,13 @@ Replace Excel-based budget tracking with a Python desktop application. Currently
 - Fixed Lisa-linked charges (Mortgage, Spaceship, etc.) being excluded from generation
 - Fixed shared_expenses linking in database
 
+## Session 2026-01-09 Fixes
+- **Lisa Payment Amount**: Fixed payday counting to start from beginning of each month (not today). January 2026 with 3 paydays now correctly calculates $833.33/payday.
+- **No Duplicate Charges**: Shared expenses (Mortgage, SCCU Loan, Spaceship, Windows) linked to Lisa Payments now skipped in transaction generation.
+- **CC ↔ Recurring Charge Sync**: Credit cards now auto-sync linked recurring charges on save (updates day_of_month to match due_day, sets amount_type to CALCULATED).
+- **Recurring Charges Display**: Now shows actual calculated amounts and due days from linked credit cards.
+- **BJs Fix**: Payment date corrected from day 5 to day 2 (matches credit card due_day).
+
 ## What's Next (Phase 9 - Future/Advanced)
 Phase 9 contains advanced features for future development:
 1. Tax estimation feature

@@ -38,3 +38,12 @@ Changed payday generation to use `paycheck.effective_date` as the reference poin
 
 ## 2026-01-08: Delete ALL future non-posted transactions on regenerate
 Changed `Transaction.delete_future_recurring()` to delete all transactions where `is_posted = 0`, not just those with `recurring_charge_id IS NOT NULL`. Fixes duplicate Payday/LDBPD transactions.
+
+## 2026-01-09: Lisa payment counts paydays from month start
+Changed `_generate_payday_transactions()` to count paydays starting from the 1st of the month, not from `start_date` (today). This ensures 3-payday months like January 2026 (1/2, 1/16, 1/30) correctly calculate $833.33 per payday instead of $1250.
+
+## 2026-01-09: Credit cards auto-sync linked recurring charges
+Added `_sync_linked_recurring_charges()` to `CreditCard.save()`. When a credit card is saved, any linked recurring charges automatically update their `day_of_month` to match the card's `due_day` and set `amount_type` to `CALCULATED`. Ensures recurring charge payments always match the credit card's due date.
+
+## 2026-01-09: CALCULATED amount_type for credit card payments
+Added `CALCULATED` as an alias for `CREDIT_CARD_BALANCE` in `RecurringCharge.get_actual_amount()`. Both types pull the `min_payment` from the linked credit card. CALCULATED is the default for CC-linked charges.

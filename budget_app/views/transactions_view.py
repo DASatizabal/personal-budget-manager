@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QPushButton, QDialog, QFormLayout, QLineEdit,
     QComboBox, QHeaderView, QMessageBox, QDateEdit, QLabel,
-    QCheckBox, QGroupBox, QProgressBar, QApplication, QMenu
+    QCheckBox, QGroupBox, QProgressBar, QApplication, QMenu, QWidgetAction
 )
 from .widgets import NoScrollDoubleSpinBox, NoScrollSpinBox
 from PyQt6.QtCore import Qt, QDate, QThread, pyqtSignal, QSettings
@@ -102,6 +102,52 @@ class TransactionsView(QWidget):
         toolbar.addWidget(self.columns_btn)
 
         layout.addLayout(toolbar)
+
+        # Filter row
+        filter_layout = QHBoxLayout()
+        filter_layout.setSpacing(8)
+
+        filter_layout.addWidget(QLabel("Filters:"))
+
+        # Description filter
+        filter_layout.addWidget(QLabel("Description:"))
+        self.desc_filter = QLineEdit()
+        self.desc_filter.setPlaceholderText("Search...")
+        self.desc_filter.setFixedWidth(150)
+        self.desc_filter.textChanged.connect(self._apply_filters)
+        filter_layout.addWidget(self.desc_filter)
+
+        # Amount min filter
+        filter_layout.addWidget(QLabel("Amount Min:"))
+        self.amount_min_filter = QLineEdit()
+        self.amount_min_filter.setPlaceholderText("e.g. -500")
+        self.amount_min_filter.setFixedWidth(80)
+        self.amount_min_filter.textChanged.connect(self._apply_filters)
+        filter_layout.addWidget(self.amount_min_filter)
+
+        # Amount max filter
+        filter_layout.addWidget(QLabel("Max:"))
+        self.amount_max_filter = QLineEdit()
+        self.amount_max_filter.setPlaceholderText("e.g. 5000")
+        self.amount_max_filter.setFixedWidth(80)
+        self.amount_max_filter.textChanged.connect(self._apply_filters)
+        filter_layout.addWidget(self.amount_max_filter)
+
+        # Show only positive/negative
+        filter_layout.addWidget(QLabel("Show:"))
+        self.amount_sign_filter = QComboBox()
+        self.amount_sign_filter.addItems(["All", "Income (+)", "Expenses (-)"])
+        self.amount_sign_filter.setFixedWidth(100)
+        self.amount_sign_filter.currentIndexChanged.connect(self._apply_filters)
+        filter_layout.addWidget(self.amount_sign_filter)
+
+        # Clear filters button
+        clear_filters_btn = QPushButton("Clear Filters")
+        clear_filters_btn.clicked.connect(self._clear_filters)
+        filter_layout.addWidget(clear_filters_btn)
+
+        filter_layout.addStretch()
+        layout.addLayout(filter_layout)
 
         # Info label and progress bar
         info_layout = QHBoxLayout()
@@ -223,6 +269,9 @@ class TransactionsView(QWidget):
         self.columns_menu.clear()
         self._column_actions = {}
 
+        # Make menu stay open for multi-select
+        self.columns_menu.setToolTipsVisible(True)
+
         # Add "Show All" and "Hide CC Columns" quick actions
         show_all_action = QAction("Show All Columns", self)
         show_all_action.triggered.connect(self._show_all_columns)
@@ -231,6 +280,17 @@ class TransactionsView(QWidget):
         hide_cc_action = QAction("Hide All CC Columns", self)
         hide_cc_action.triggered.connect(self._hide_all_cc_columns)
         self.columns_menu.addAction(hide_cc_action)
+
+        self.columns_menu.addSeparator()
+
+        # CC column sorting options
+        sort_high_low_action = QAction("Sort CC: High → Low Balance", self)
+        sort_high_low_action.triggered.connect(lambda: self._sort_cc_columns(descending=True))
+        self.columns_menu.addAction(sort_high_low_action)
+
+        sort_low_high_action = QAction("Sort CC: Low → High Balance", self)
+        sort_low_high_action.triggered.connect(lambda: self._sort_cc_columns(descending=False))
+        self.columns_menu.addAction(sort_low_high_action)
 
         self.columns_menu.addSeparator()
 
@@ -253,6 +313,17 @@ class TransactionsView(QWidget):
 
         self.columns_menu.addSeparator()
 
+        # $0 Owed quick toggles
+        show_zero_owed_action = QAction("Show all $0 Owed", self)
+        show_zero_owed_action.triggered.connect(lambda: self._toggle_zero_owed_columns(True))
+        self.columns_menu.addAction(show_zero_owed_action)
+
+        hide_zero_owed_action = QAction("Hide all $0 Owed", self)
+        hide_zero_owed_action.triggered.connect(lambda: self._toggle_zero_owed_columns(False))
+        self.columns_menu.addAction(hide_zero_owed_action)
+
+        self.columns_menu.addSeparator()
+
         # Load saved visibility settings
         settings = QSettings("BudgetApp", "PersonalBudgetManager")
         hidden_columns = settings.value("transactions/hidden_columns", [])
@@ -260,20 +331,28 @@ class TransactionsView(QWidget):
             hidden_columns = []
 
         # Add checkable action for each credit card column (both Owed and Avail)
+        # Using QWidgetAction with QCheckBox so menu stays open for multi-select
+        self._column_checkboxes = {}
         for i, col_name in enumerate(self._all_columns):
             if "Owed" in col_name or "Avail" in col_name:
-                action = QAction(col_name, self)
-                action.setCheckable(True)
-                action.setChecked(col_name not in hidden_columns)
-                action.setData(i)  # Store column index
-                action.triggered.connect(lambda checked, idx=i: self._toggle_column(idx, checked))
-                self.columns_menu.addAction(action)
-                self._column_actions[i] = action
+                # Create checkbox widget
+                checkbox = QCheckBox(col_name)
+                checkbox.setChecked(col_name not in hidden_columns)
+                checkbox.setStyleSheet("QCheckBox { padding: 4px 8px; }")
+                checkbox.stateChanged.connect(lambda state, idx=i: self._toggle_column(idx, state == Qt.CheckState.Checked.value))
+
+                # Wrap in QWidgetAction to keep menu open
+                widget_action = QWidgetAction(self)
+                widget_action.setDefaultWidget(checkbox)
+                self.columns_menu.addAction(widget_action)
+
+                self._column_actions[i] = widget_action
+                self._column_checkboxes[i] = checkbox
 
                 # Apply saved visibility - default: hide "Owed" columns initially
                 if col_name in hidden_columns or ("Owed" in col_name and col_name not in hidden_columns and not settings.contains("transactions/hidden_columns")):
                     self.table.setColumnHidden(i, True)
-                    action.setChecked(False)
+                    checkbox.setChecked(False)
 
     def _toggle_column(self, column_index: int, visible: bool):
         """Toggle visibility of a column"""
@@ -284,8 +363,8 @@ class TransactionsView(QWidget):
         """Show all columns"""
         for i in range(self.table.columnCount()):
             self.table.setColumnHidden(i, False)
-            if i in self._column_actions:
-                self._column_actions[i].setChecked(True)
+            if i in self._column_checkboxes:
+                self._column_checkboxes[i].setChecked(True)
         self._save_column_visibility()
 
     def _hide_all_cc_columns(self):
@@ -293,8 +372,8 @@ class TransactionsView(QWidget):
         for i, col_name in enumerate(self._all_columns):
             if "Owed" in col_name or "Avail" in col_name:
                 self.table.setColumnHidden(i, True)
-                if i in self._column_actions:
-                    self._column_actions[i].setChecked(False)
+                if i in self._column_checkboxes:
+                    self._column_checkboxes[i].setChecked(False)
         self._save_column_visibility()
 
     def _toggle_column_group(self, group_type: str, visible: bool):
@@ -302,9 +381,93 @@ class TransactionsView(QWidget):
         for i, col_name in enumerate(self._all_columns):
             if group_type in col_name:
                 self.table.setColumnHidden(i, not visible)
-                if i in self._column_actions:
-                    self._column_actions[i].setChecked(visible)
+                if i in self._column_checkboxes:
+                    self._column_checkboxes[i].setChecked(visible)
         self._save_column_visibility()
+
+    def _toggle_zero_owed_columns(self, visible: bool):
+        """Toggle visibility of Owed columns for credit cards with $0 balance"""
+        # Get current card balances
+        card_balances = {c.name: c.current_balance for c in self._cards}
+
+        for i, col_name in enumerate(self._all_columns):
+            if "Owed" in col_name:
+                # Extract card name from column name (e.g., "Amex Owed" -> "Amex")
+                card_name = col_name.replace(" Owed", "")
+                # Check if this card has $0 balance
+                if card_balances.get(card_name, -1) == 0:
+                    self.table.setColumnHidden(i, not visible)
+                    if i in self._column_checkboxes:
+                        self._column_checkboxes[i].setChecked(visible)
+        self._save_column_visibility()
+
+    def _sort_cc_columns(self, descending: bool = True):
+        """Sort credit card columns by current balance"""
+        # Sort cards by balance
+        sorted_cards = sorted(self._cards, key=lambda c: c.current_balance, reverse=descending)
+
+        # Update the internal cards list
+        self._cards = sorted_cards
+
+        # Rebuild the table columns with new order
+        self._rebuild_columns_with_sorted_cards()
+
+        # Refresh data to populate with new column order
+        self.mark_dirty()
+        self.refresh()
+
+    def _rebuild_columns_with_sorted_cards(self):
+        """Rebuild column structure after sorting cards"""
+        # Preserve current visibility settings
+        settings = QSettings("BudgetApp", "PersonalBudgetManager")
+        hidden_columns = settings.value("transactions/hidden_columns", [])
+        if hidden_columns is None:
+            hidden_columns = []
+
+        # Rebuild columns list
+        columns = self._base_columns.copy()
+        self._card_owed_columns = []
+        self._card_avail_columns = []
+
+        for card in self._cards:
+            owed_col = f"{card.name} Owed"
+            avail_col = f"{card.name} Avail"
+            columns.append(owed_col)
+            columns.append(avail_col)
+            self._card_owed_columns.append(owed_col)
+            self._card_avail_columns.append(avail_col)
+
+        columns.append("CC Utilization")
+        self._all_columns = columns
+
+        # Update table headers
+        self.table.setColumnCount(len(columns))
+        self.table.setHorizontalHeaderLabels(columns)
+
+        # Set default column widths
+        default_widths = {
+            "Date": 90,
+            "Pay Type": 70,
+            "Description": 200,
+            "Amount": 100,
+            "Chase Balance": 110,
+            "CC Utilization": 100
+        }
+        for i, col in enumerate(columns):
+            if col in default_widths:
+                self.table.setColumnWidth(i, default_widths[col])
+            elif "Owed" in col or "Avail" in col:
+                self.table.setColumnWidth(i, 95)
+
+        # Rebuild the columns menu
+        self._setup_columns_menu()
+
+        # Restore visibility settings
+        for i, col_name in enumerate(self._all_columns):
+            if col_name in hidden_columns:
+                self.table.setColumnHidden(i, True)
+                if i in self._column_checkboxes:
+                    self._column_checkboxes[i].setChecked(False)
 
     def _save_column_visibility(self):
         """Save column visibility to settings"""
@@ -387,6 +550,71 @@ class TransactionsView(QWidget):
         """Mark data as dirty so next refresh reloads from database"""
         self._data_dirty = True
 
+    def _apply_filters(self):
+        """Apply column filters to hide/show rows"""
+        desc_filter = self.desc_filter.text().lower().strip()
+        amount_min_text = self.amount_min_filter.text().strip()
+        amount_max_text = self.amount_max_filter.text().strip()
+        sign_filter = self.amount_sign_filter.currentIndex()  # 0=All, 1=Income, 2=Expenses
+
+        # Parse amount filters
+        amount_min = None
+        amount_max = None
+        try:
+            if amount_min_text:
+                amount_min = float(amount_min_text)
+        except ValueError:
+            pass
+        try:
+            if amount_max_text:
+                amount_max = float(amount_max_text)
+        except ValueError:
+            pass
+
+        # Apply filters to each row
+        for row in range(self.table.rowCount()):
+            show_row = True
+
+            # Description filter (column 2)
+            if desc_filter:
+                desc_item = self.table.item(row, 2)
+                if desc_item and desc_filter not in desc_item.text().lower():
+                    show_row = False
+
+            # Amount filter (column 3)
+            if show_row and (amount_min is not None or amount_max is not None or sign_filter != 0):
+                amount_item = self.table.item(row, 3)
+                if amount_item:
+                    try:
+                        amount_text = amount_item.text().replace('$', '').replace(',', '').strip()
+                        amount = float(amount_text)
+
+                        # Check min/max
+                        if amount_min is not None and amount < amount_min:
+                            show_row = False
+                        if amount_max is not None and amount > amount_max:
+                            show_row = False
+
+                        # Check sign filter
+                        if sign_filter == 1 and amount <= 0:  # Income only
+                            show_row = False
+                        elif sign_filter == 2 and amount >= 0:  # Expenses only
+                            show_row = False
+                    except ValueError:
+                        pass
+
+            self.table.setRowHidden(row, not show_row)
+
+    def _clear_filters(self):
+        """Clear all column filters"""
+        self.desc_filter.setText("")
+        self.amount_min_filter.setText("")
+        self.amount_max_filter.setText("")
+        self.amount_sign_filter.setCurrentIndex(0)
+        # Show all rows
+        for row in range(self.table.rowCount()):
+            self.table.setRowHidden(row, False)
+
     def refresh(self):
         """Refresh the table with transactions and running balances"""
         # On first load, auto-generate recurring transactions if none exist
@@ -437,8 +665,8 @@ class TransactionsView(QWidget):
             # Get starting balances
             starting = get_starting_balances()
 
-            # Get cards once for column mapping (avoid redundant queries)
-            cards = CreditCard.get_all()
+            # Use self._cards for column mapping (preserves sort order)
+            cards = self._cards
             card_codes = [c.pay_type_code for c in cards]
             card_limits = {c.pay_type_code: c.credit_limit for c in cards}
             self.progress_bar.setValue(30)
@@ -447,6 +675,14 @@ class TransactionsView(QWidget):
             # Calculate running balances (optimized inline version)
             running = starting.copy()
             total_limit = sum(c.credit_limit for c in cards)
+
+            # Build cache of recurring charges that are credit card payments
+            # Maps recurring_charge_id -> pay_type_code of the linked card
+            cc_payment_map = {}
+            card_id_to_code = {c.id: c.pay_type_code for c in cards}
+            for charge in RecurringCharge.get_all():
+                if charge.linked_card_id and charge.linked_card_id in card_id_to_code:
+                    cc_payment_map[charge.id] = card_id_to_code[charge.linked_card_id]
 
             # Block table signals during population for performance
             self.table.blockSignals(True)
@@ -462,9 +698,18 @@ class TransactionsView(QWidget):
 
                 method = trans.payment_method
 
-                # Update the relevant balance
-                if method in running:
+                # Update the relevant balance - only for non-posted transactions
+                # Posted transactions are already reflected in the current balance
+                if method in running and not trans.is_posted:
                     running[method] += trans.amount
+
+                    # If this is a credit card payment, also update the card's balance
+                    # The payment reduces the card's debt (amount is negative, so it reduces owed)
+                    if trans.recurring_charge_id in cc_payment_map:
+                        linked_card_code = cc_payment_map[trans.recurring_charge_id]
+                        if linked_card_code in running:
+                            # Payment amount is negative (from Chase), apply as positive reduction to card debt
+                            running[linked_card_code] += trans.amount  # trans.amount is already negative
 
                 # Calculate utilization
                 total_balance = sum(running.get(c.pay_type_code, 0) for c in cards)
@@ -603,82 +848,25 @@ class TransactionsView(QWidget):
     def _do_generate_recurring(self, months: int = 3, clear_existing: bool = True,
                                 show_message: bool = True):
         """Actually generate the recurring transactions"""
+        from ..utils.calculations import generate_future_transactions
+
         today = datetime.now().date()
 
         if clear_existing:
             # Delete future recurring transactions
             Transaction.delete_future_recurring(today.strftime('%Y-%m-%d'))
 
-        # Get all active recurring charges
-        charges = RecurringCharge.get_all(active_only=True)
-
-        # Get IDs of charges linked to shared expenses (Lisa Payments)
-        # These are handled separately in payday generation
-        lisa_linked_ids = SharedExpense.get_linked_recurring_ids()
-
-        # Get paycheck config
-        paycheck = PaycheckConfig.get_current()
-
-        generated_count = 0
-        end_date = today + timedelta(days=months * 30)
-
-        # Generate regular monthly charges
-        current_date = today
-        while current_date <= end_date:
-            day = current_date.day
-
-            for charge in charges:
-                # Skip special frequency charges (handled separately)
-                if charge.frequency == 'SPECIAL':
-                    continue
-
-                # Skip charges with special day codes (991-999)
-                if charge.day_of_month >= 991:
-                    continue
-
-                # Skip charges linked to Lisa Payments (handled in payday generation)
-                if charge.id in lisa_linked_ids:
-                    continue
-
-                # Handle day 32 as last day of month
-                charge_day = charge.day_of_month
-                if charge_day == 32:
-                    # Last day of month
-                    last_day = calendar.monthrange(current_date.year, current_date.month)[1]
-                    charge_day = last_day
-
-                if charge_day == day:
-                    amount = charge.get_actual_amount()
-                    # Skip if amount is 0 and it's not a credit card payment marker
-                    if amount == 0 and charge.amount_type != 'CREDIT_CARD_BALANCE':
-                        continue
-
-                    trans = Transaction(
-                        id=None,
-                        date=current_date.strftime('%Y-%m-%d'),
-                        description=charge.name,
-                        amount=amount,
-                        payment_method=charge.payment_method,
-                        recurring_charge_id=charge.id,
-                        is_posted=False
-                    )
-                    trans.save()
-                    generated_count += 1
-
-            current_date += timedelta(days=1)
-
-        # Generate special charges (pass lisa_linked_ids to exclude linked charges)
-        generated_count += self._generate_special_charges(today, end_date, charges, paycheck, lisa_linked_ids)
-
-        # Generate payday transactions
-        if paycheck:
-            generated_count += self._generate_payday_transactions(today, end_date, paycheck)
+        # Generate transactions using the centralized function (includes interest charges)
+        transactions = generate_future_transactions(months_ahead=months)
+        for trans in transactions:
+            trans.save()
 
         if show_message:
+            end_date = today + timedelta(days=months * 30)
             QMessageBox.information(
                 self,
                 "Generation Complete",
-                f"Generated {generated_count} recurring transactions\n"
+                f"Generated {len(transactions)} recurring transactions\n"
                 f"From {today} to {end_date}"
             )
 
@@ -1009,6 +1197,7 @@ class GenerateRecurringDialog(QDialog):
         summary_layout.addWidget(QLabel(f"- {special_count} special charges (mortgage, etc.)"))
         summary_layout.addWidget(QLabel("- Bi-weekly paydays"))
         summary_layout.addWidget(QLabel("- Lisa payments (based on paycheck count)"))
+        summary_layout.addWidget(QLabel("- Credit card interest charges"))
         layout.addWidget(summary)
 
         # Buttons

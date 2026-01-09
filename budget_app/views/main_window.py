@@ -337,26 +337,25 @@ class MainWindow(QMainWindow):
 
     def _generate_transactions(self):
         """Generate future transactions from recurring charges"""
+        from .transactions_view import GenerateRecurringDialog
         from ..utils.calculations import generate_future_transactions
         from ..models.transaction import Transaction
 
-        reply = QMessageBox.question(
-            self,
-            "Generate Transactions",
-            "Generate future transactions for the next 12 months?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
+        dialog = GenerateRecurringDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            months = dialog.get_months()
+            clear_existing = dialog.get_clear_existing()
 
-        if reply == QMessageBox.StandardButton.Yes:
             # Create auto-backup before deleting transactions
             create_auto_backup("generate_transactions")
 
             try:
-                # Delete existing future recurring transactions
-                Transaction.delete_future_recurring()
+                if clear_existing:
+                    # Delete existing future recurring transactions
+                    Transaction.delete_future_recurring()
 
                 # Generate new ones
-                transactions = generate_future_transactions(months_ahead=12)
+                transactions = generate_future_transactions(months_ahead=months)
                 for trans in transactions:
                     trans.save()
 

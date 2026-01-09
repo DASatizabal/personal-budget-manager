@@ -19,7 +19,8 @@ class Transaction:
 
     @property
     def date_obj(self) -> date:
-        return datetime.strptime(self.date, '%Y-%m-%d').date()
+        # Handle dates with optional time component (e.g., "2026-01-15 23:59:59")
+        return datetime.strptime(self.date[:10], '%Y-%m-%d').date()
 
     def save(self) -> 'Transaction':
         db = Database()

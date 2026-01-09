@@ -43,12 +43,17 @@ class RecurringCharge:
     def delete(self):
         if self.id:
             db = Database()
+            # Unlink any transactions that reference this charge
+            db.execute("UPDATE transactions SET recurring_charge_id = NULL WHERE recurring_charge_id = ?", (self.id,))
+            # Unlink any shared expenses that reference this charge
+            db.execute("UPDATE shared_expenses SET linked_recurring_id = NULL WHERE linked_recurring_id = ?", (self.id,))
+            # Now safe to delete the charge
             db.execute("DELETE FROM recurring_charges WHERE id = ?", (self.id,))
             db.commit()
 
     def get_actual_amount(self) -> float:
         """Get the actual amount, resolving linked card minimum payments if needed"""
-        if self.amount_type == 'CREDIT_CARD_BALANCE' and self.linked_card_id:
+        if self.amount_type in ('CREDIT_CARD_BALANCE', 'CALCULATED') and self.linked_card_id:
             from .credit_card import CreditCard
             card = CreditCard.get_by_id(self.linked_card_id)
             if card:

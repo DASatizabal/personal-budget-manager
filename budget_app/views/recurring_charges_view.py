@@ -3,10 +3,11 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QPushButton, QDialog, QFormLayout, QLineEdit,
-    QComboBox, QHeaderView, QMessageBox, QCheckBox
+    QComboBox, QHeaderView, QMessageBox, QCheckBox,
+    QLabel, QGroupBox, QRadioButton, QDateEdit
 )
 from .widgets import NoScrollDoubleSpinBox, NoScrollSpinBox
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QColor
 
 from ..models.recurring_charge import RecurringCharge
@@ -77,20 +78,30 @@ class RecurringChargesView(QWidget):
         cards = {c.pay_type_code: c.name for c in CreditCard.get_all()}
         cards['C'] = 'Chase (Bank)'
 
+        # Build map of card IDs to cards for linked charges
+        card_map = {c.id: c for c in CreditCard.get_all()}
+
         for row, charge in enumerate(charges):
             name_item = QTableWidgetItem(charge.name)
             name_item.setData(Qt.ItemDataRole.UserRole, charge.id)
             self.table.setItem(row, 0, name_item)
 
-            amount_item = QTableWidgetItem(f"${charge.amount:,.2f}")
-            if charge.amount < 0:
+            # For linked cards, show the actual calculated amount
+            display_amount = charge.get_actual_amount()
+            amount_item = QTableWidgetItem(f"${display_amount:,.2f}")
+            if display_amount < 0:
                 amount_item.setForeground(QColor("#f44336"))
             else:
                 amount_item.setForeground(QColor("#4caf50"))
             self.table.setItem(row, 1, amount_item)
 
-            # Day display
-            day = charge.day_of_month
+            # Day display - for linked cards, show the card's due_day
+            if charge.linked_card_id and charge.linked_card_id in card_map:
+                linked_card = card_map[charge.linked_card_id]
+                day = linked_card.due_day if linked_card.due_day else charge.day_of_month
+            else:
+                day = charge.day_of_month
+
             if day >= 991:
                 day_text = f"Special ({day})"
             else:
@@ -149,15 +160,127 @@ class RecurringChargesView(QWidget):
 
         charge = RecurringCharge.get_by_id(charge_id)
         if charge:
-            reply = QMessageBox.question(
-                self,
-                "Confirm Delete",
-                f"Are you sure you want to delete '{charge.name}'?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-            if reply == QMessageBox.StandardButton.Yes:
+            dialog = DeleteRecurringChargeDialog(self, charge)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                action = dialog.get_action()
+                from_date = dialog.get_from_date()
+
+                from ..models.database import Database
+                db = Database()
+
+                if action == "delete_all":
+                    # Delete all transactions linked to this charge
+                    db.execute("DELETE FROM transactions WHERE recurring_charge_id = ?", (charge.id,))
+                elif action == "delete_from_date":
+                    # Delete transactions from a certain date forward
+                    db.execute(
+                        "DELETE FROM transactions WHERE recurring_charge_id = ? AND date >= ?",
+                        (charge.id, from_date)
+                    )
+                    # Unlink older transactions
+                    db.execute(
+                        "UPDATE transactions SET recurring_charge_id = NULL WHERE recurring_charge_id = ?",
+                        (charge.id,)
+                    )
+                # else "keep" - just unlink (handled in charge.delete())
+
+                db.commit()
                 charge.delete()
                 self.refresh()
+
+
+class DeleteRecurringChargeDialog(QDialog):
+    """Dialog for choosing what to do with transactions when deleting a recurring charge"""
+
+    def __init__(self, parent, charge: RecurringCharge):
+        super().__init__(parent)
+        self.charge = charge
+        self.setWindowTitle("Delete Recurring Charge")
+        self.setMinimumWidth(400)
+        self._action = "keep"
+        self._from_date = None
+        self._setup_ui()
+
+    def _setup_ui(self):
+        from ..models.database import Database
+
+        layout = QVBoxLayout(self)
+
+        # Count linked transactions
+        db = Database()
+        count = db.execute(
+            "SELECT COUNT(*) FROM transactions WHERE recurring_charge_id = ?",
+            (self.charge.id,)
+        ).fetchone()[0]
+
+        # Info
+        info = QLabel(f"Delete recurring charge: <b>{self.charge.name}</b>")
+        layout.addWidget(info)
+
+        if count > 0:
+            count_label = QLabel(f"There are <b>{count}</b> transactions linked to this charge.")
+            layout.addWidget(count_label)
+
+            layout.addWidget(QLabel("What would you like to do with these transactions?"))
+
+            # Options
+            options_group = QGroupBox("Transaction Options")
+            options_layout = QVBoxLayout(options_group)
+
+            self.keep_radio = QRadioButton("Keep all transactions (unlink from charge)")
+            self.keep_radio.setChecked(True)
+            options_layout.addWidget(self.keep_radio)
+
+            self.delete_all_radio = QRadioButton("Delete all linked transactions")
+            options_layout.addWidget(self.delete_all_radio)
+
+            self.delete_from_radio = QRadioButton("Delete transactions from date:")
+            options_layout.addWidget(self.delete_from_radio)
+
+            # Date picker for "delete from date" option
+            date_layout = QHBoxLayout()
+            date_layout.addSpacing(20)
+            self.from_date_edit = QDateEdit()
+            self.from_date_edit.setDate(QDate.currentDate())
+            self.from_date_edit.setCalendarPopup(True)
+            self.from_date_edit.setDisplayFormat("MM/dd/yyyy")
+            self.from_date_edit.setEnabled(False)
+            date_layout.addWidget(self.from_date_edit)
+            date_layout.addStretch()
+            options_layout.addLayout(date_layout)
+
+            # Enable date picker only when "delete from date" is selected
+            self.delete_from_radio.toggled.connect(self.from_date_edit.setEnabled)
+
+            layout.addWidget(options_group)
+        else:
+            layout.addWidget(QLabel("No transactions are linked to this charge."))
+
+        # Buttons
+        btn_layout = QHBoxLayout()
+        delete_btn = QPushButton("Delete Charge")
+        delete_btn.setStyleSheet("background-color: #f44336; color: white;")
+        delete_btn.clicked.connect(self.accept)
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        btn_layout.addStretch()
+        btn_layout.addWidget(delete_btn)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+
+    def get_action(self) -> str:
+        """Get the selected action: 'keep', 'delete_all', or 'delete_from_date'"""
+        if hasattr(self, 'delete_all_radio') and self.delete_all_radio.isChecked():
+            return "delete_all"
+        elif hasattr(self, 'delete_from_radio') and self.delete_from_radio.isChecked():
+            return "delete_from_date"
+        return "keep"
+
+    def get_from_date(self) -> str:
+        """Get the from date for 'delete_from_date' action"""
+        if hasattr(self, 'from_date_edit'):
+            return self.from_date_edit.date().toString("yyyy-MM-dd")
+        return None
 
 
 class RecurringChargeDialog(QDialog):

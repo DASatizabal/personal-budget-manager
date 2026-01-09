@@ -63,7 +63,25 @@ class CreditCard:
                   self.interest_rate, self.due_day, self.min_payment_type, self.min_payment_amount,
                   self.id))
         db.commit()
+        # Sync any linked recurring charges
+        self._sync_linked_recurring_charges()
         return self
+
+    def _sync_linked_recurring_charges(self):
+        """Sync linked recurring charges with this card's due_day and ensure correct type"""
+        if self.id is None:
+            return
+        db = Database()
+        # Update any recurring charges linked to this card:
+        # - Set day_of_month to match due_day
+        # - Set amount_type to CALCULATED (uses min_payment from card)
+        if self.due_day:
+            db.execute("""
+                UPDATE recurring_charges
+                SET day_of_month = ?, amount_type = 'CALCULATED'
+                WHERE linked_card_id = ?
+            """, (self.due_day, self.id))
+            db.commit()
 
     def delete(self):
         if self.id:
