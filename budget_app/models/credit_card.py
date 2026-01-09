@@ -44,7 +44,8 @@ class CreditCard:
 
     def save(self) -> 'CreditCard':
         db = Database()
-        if self.id is None:
+        is_new = self.id is None
+        if is_new:
             cursor = db.execute("""
                 INSERT INTO credit_cards
                 (pay_type_code, name, credit_limit, current_balance, interest_rate,
@@ -63,8 +64,13 @@ class CreditCard:
                   self.interest_rate, self.due_day, self.min_payment_type, self.min_payment_amount,
                   self.id))
         db.commit()
-        # Sync any linked recurring charges
-        self._sync_linked_recurring_charges()
+
+        # For new cards, create a corresponding recurring charge for payment tracking
+        if is_new:
+            self._create_recurring_charge()
+        else:
+            # Sync any linked recurring charges
+            self._sync_linked_recurring_charges()
         return self
 
     def _sync_linked_recurring_charges(self):
@@ -82,6 +88,39 @@ class CreditCard:
                 WHERE linked_card_id = ?
             """, (self.due_day, self.id))
             db.commit()
+
+    def _create_recurring_charge(self):
+        """Create a recurring charge for this credit card's payment"""
+        if self.id is None or self.due_day is None:
+            return
+
+        from .recurring_charge import RecurringCharge
+
+        # Check if a recurring charge already exists for this card
+        db = Database()
+        existing = db.execute(
+            "SELECT id FROM recurring_charges WHERE linked_card_id = ?",
+            (self.id,)
+        ).fetchone()
+
+        if existing:
+            # Already has a linked charge, just sync it
+            self._sync_linked_recurring_charges()
+            return
+
+        # Create new recurring charge for this card's payment
+        charge = RecurringCharge(
+            id=None,
+            name=self.name,
+            amount=0,  # Will be calculated from min_payment
+            day_of_month=self.due_day,
+            payment_method='C',  # Payments come from Chase (bank account)
+            frequency='MONTHLY',
+            amount_type='CALCULATED',
+            linked_card_id=self.id,
+            is_active=True
+        )
+        charge.save()
 
     def delete(self):
         if self.id:
