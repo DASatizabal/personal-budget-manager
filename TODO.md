@@ -82,10 +82,32 @@
 - [x] 8.5.7 Auto-create recurring charge when adding new credit card
 
 ## Phase 9: Advanced Features (Future)
-*Nice-to-have, significant effort*
+*Nice-to-have, significant effort. Ordered by workflow optimization.*
 
-- [ ] 9.1 Tax estimation feature
-- [ ] 9.2 Credit Card Payoff Planner (replaces "Optimal payment distribution algorithm")
+### Quick Wins / Foundational
+- [ ] 9.1 Auto-select monetary input fields on click
+  - All monetary input fields throughout the app should auto-highlight/select on click
+  - User can immediately type new amount without manual selection
+  - Assume 0 cents until decimal is typed (e.g., typing "150" = $150.00)
+  - Remove up/down spinner arrows from monetary fields
+  - Apply to: balance fields, amount fields, payment fields, etc.
+- [ ] 9.2 Refresh Recurring Charges tab when Credit Cards tab is updated
+
+### UI Improvements
+- [ ] 9.3 Dashboard "Quick Update" for balances
+  - Add Quick Update option/tab/wizard to Dashboard
+  - Single view with all bank and credit card balance fields
+  - Tab-friendly navigation between fields
+  - Update all balances in one place without opening separate dialogs
+- [ ] 9.4 Modernize GUI appearance (see `claude_code_GUI_prompt.md`)
+  - Install theme library (qt-material, qdarkstyle, or PyQtDarkTheme)
+  - Apply theme in main.py before main window shown
+  - Integrate with existing dark mode toggle or replace
+  - Add consistent spacing/margins to layouts
+  - Verify all 7 tabs render correctly with new theme
+
+### Core Features
+- [ ] 9.5 Credit Card Payoff Planner
   - New dedicated "Payoff Planner" tab
   - Four payoff methods with explanations:
     - **Avalanche**: Highest APR first (saves most money)
@@ -100,28 +122,15 @@
   - Auto-adjusts payments to prevent future negative balances
   - On-demand calculation (user clicks to calculate/apply)
   - See `.claude/plans/humming-napping-pony.md` for full implementation plan
-- [ ] 9.3 Deferred interest purchase tracking
-- [ ] 9.4 Credit card statement parsing (PDF/CSV upload)
-- [ ] 9.5 Bank API integration (Plaid/Yodlee) for auto-import
-- [ ] 9.6 Refresh Recurring Charges tab when Credit Cards tab is updated
-- [ ] 9.7 Paycheck/paystub parsing (PDF)
-- [ ] 9.8 Modernize GUI appearance (see `claude_code_GUI_prompt.md`)
-  - Install theme library (qt-material, qdarkstyle, or PyQtDarkTheme)
-  - Apply theme in main.py before main window shown
-  - Integrate with existing dark mode toggle or replace
-  - Add consistent spacing/margins to layouts
-  - Verify all 7 tabs render correctly with new theme
-- [ ] 9.9 Dashboard "Quick Update" for balances
-  - Add Quick Update option/tab/wizard to Dashboard
-  - Single view with all bank and credit card balance fields
-  - Tab-friendly navigation between fields
-  - Update all balances in one place without opening separate dialogs
-- [ ] 9.10 Auto-select monetary input fields on click
-  - All monetary input fields throughout the app should auto-highlight/select on click
-  - User can immediately type new amount without manual selection
-  - Assume 0 cents until decimal is typed (e.g., typing "150" = $150.00)
-  - Remove up/down spinner arrows from monetary fields
-  - Apply to: balance fields, amount fields, payment fields, etc.
+
+### Parsing Features
+- [ ] 9.6 Paycheck/paystub parsing (PDF)
+- [ ] 9.7 Credit card statement parsing (PDF/CSV upload)
+
+### Advanced Features
+- [ ] 9.8 Tax estimation feature
+- [ ] 9.9 Deferred interest purchase tracking
+- [ ] 9.10 Bank API integration (Plaid/Yodlee) for auto-import
 
 ---
 
