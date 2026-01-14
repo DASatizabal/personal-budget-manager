@@ -85,13 +85,27 @@ Replace Excel-based budget tracking with a Python desktop application. Currently
 - **Skip Posted on Generate**: Recurring transaction generation now skips already-posted transactions to prevent duplicates
 - **"Dirty" Pattern**: Dashboard and Posted views use mark_dirty() pattern for efficient lazy refresh
 
+## Session 2026-01-13 Updates
+- Added detailed TODO items for Phase 9 future features:
+  - 9.2 Credit Card Payoff Planner (full implementation plan in `.claude/plans/humming-napping-pony.md`)
+  - 9.6 Refresh Recurring Charges tab when Credit Cards tab updated
+  - 9.7 Paycheck/paystub parsing (PDF)
+  - 9.8 Modernize GUI appearance
+  - 9.9 Dashboard "Quick Update" for balances
+  - 9.10 Auto-select monetary input fields on click
+
 ## What's Next (Phase 9 - Future/Advanced)
 Phase 9 contains advanced features for future development:
 1. Tax estimation feature
-2. Optimal payment distribution algorithm
+2. Credit Card Payoff Planner (avalanche, snowball, hybrid, cashflow methods)
 3. Deferred interest purchase tracking
 4. Credit card statement parsing (PDF/CSV)
 5. Bank API integration (Plaid/Yodlee)
+6. Refresh Recurring Charges on CC update
+7. Paycheck/paystub parsing
+8. Modernize GUI appearance
+9. Dashboard Quick Update
+10. Auto-select monetary input fields
 
 ## Current Blockers
 None

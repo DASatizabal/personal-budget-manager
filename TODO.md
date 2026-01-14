@@ -85,10 +85,43 @@
 *Nice-to-have, significant effort*
 
 - [ ] 9.1 Tax estimation feature
-- [ ] 9.2 Optimal payment distribution algorithm
+- [ ] 9.2 Credit Card Payoff Planner (replaces "Optimal payment distribution algorithm")
+  - New dedicated "Payoff Planner" tab
+  - Four payoff methods with explanations:
+    - **Avalanche**: Highest APR first (saves most money)
+    - **Snowball**: Lowest balance first (psychological wins)
+    - **Hybrid**: Weighted score (60% APR, 40% quick wins)
+    - **Cashflow**: Highest utilization first (frees credit fastest)
+  - Comparison table showing payoff date, total interest, monthly average for each method
+  - User inputs: minimum reserve amount (default $0.01), payment timing preference
+  - Payment timing options: on payday, spread across period, or day before LDBPD
+  - Calculates surplus from positive Chase balance at each LDBPD
+  - Creates separate "Extra Payment" transactions (keeps existing min payments)
+  - Auto-adjusts payments to prevent future negative balances
+  - On-demand calculation (user clicks to calculate/apply)
+  - See `.claude/plans/humming-napping-pony.md` for full implementation plan
 - [ ] 9.3 Deferred interest purchase tracking
 - [ ] 9.4 Credit card statement parsing (PDF/CSV upload)
 - [ ] 9.5 Bank API integration (Plaid/Yodlee) for auto-import
+- [ ] 9.6 Refresh Recurring Charges tab when Credit Cards tab is updated
+- [ ] 9.7 Paycheck/paystub parsing (PDF)
+- [ ] 9.8 Modernize GUI appearance (see `claude_code_GUI_prompt.md`)
+  - Install theme library (qt-material, qdarkstyle, or PyQtDarkTheme)
+  - Apply theme in main.py before main window shown
+  - Integrate with existing dark mode toggle or replace
+  - Add consistent spacing/margins to layouts
+  - Verify all 7 tabs render correctly with new theme
+- [ ] 9.9 Dashboard "Quick Update" for balances
+  - Add Quick Update option/tab/wizard to Dashboard
+  - Single view with all bank and credit card balance fields
+  - Tab-friendly navigation between fields
+  - Update all balances in one place without opening separate dialogs
+- [ ] 9.10 Auto-select monetary input fields on click
+  - All monetary input fields throughout the app should auto-highlight/select on click
+  - User can immediately type new amount without manual selection
+  - Assume 0 cents until decimal is typed (e.g., typing "150" = $150.00)
+  - Remove up/down spinner arrows from monetary fields
+  - Apply to: balance fields, amount fields, payment fields, etc.
 
 ---
 

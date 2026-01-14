@@ -6,7 +6,7 @@
 Personal Budget Manager - a Python/PyQt6 desktop app replacing an Excel-based financial tracking system. Tracks bank accounts, 11 credit cards, 2 401k loans, recurring charges, and projects future cash flow.
 
 ## Current State
-**Phase 8.5 Complete** - All core phases complete + Posted transactions feature. GitHub repo created.
+**Phase 8.5 Complete** - All core phases complete + Posted transactions feature. GitHub repo created. Phase 9 TODO items expanded with detailed plans.
 
 Working features:
 - Excel import from `Budget v2 Claude.xlsx`
@@ -29,6 +29,7 @@ Working features:
 - **Phase 8.5 features:** Posted transactions tab, checkbox posting, balance updates on post, skip posted on generate
 - **Session 2026-01-08 fixes:** CC min payment, transaction sorting (positive first), payday anchor date, delete all non-posted, Delete All button
 - **Session 2026-01-09 fixes:** Lisa payment 3-payday month calculation, duplicate shared expense prevention, CC↔recurring charge auto-sync, auto-create recurring charge for new CC
+- **Session 2026-01-13:** Expanded Phase 9 TODO with detailed feature plans (Credit Card Payoff Planner, GUI modernization, Quick Update, etc.)
 
 ## Key Constraints
 - **Local only** - no cloud/server, SQLite database
