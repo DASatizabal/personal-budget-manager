@@ -109,11 +109,12 @@
 ### Core Features
 - [ ] 9.5 Credit Card Payoff Planner
   - New dedicated "Payoff Planner" tab
-  - Four payoff methods with explanations:
+  - Five payoff methods with explanations:
     - **Avalanche**: Highest APR first (saves most money)
     - **Snowball**: Lowest balance first (psychological wins)
     - **Hybrid**: Weighted score (60% APR, 40% quick wins)
     - **Cashflow**: Highest utilization first (frees credit fastest)
+    - **Cash on Hand**: Pay only minimums, maximize bank balance
   - Comparison table showing payoff date, total interest, monthly average for each method
   - User inputs: minimum reserve amount (default $0.01), payment timing preference
   - Payment timing options: on payday, spread across period, or day before LDBPD
