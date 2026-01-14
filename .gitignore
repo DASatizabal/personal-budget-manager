@@ -52,3 +52,4 @@ auto_backups/
 
 # Claude settings
 .claude/
+tmpclaude-*
