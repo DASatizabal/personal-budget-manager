@@ -94,6 +94,17 @@ Replace Excel-based budget tracking with a Python desktop application. Currently
   - 9.9 Dashboard "Quick Update" for balances
   - 9.10 Auto-select monetary input fields on click
 
+## Session 2026-01-14 Updates
+- **9.1 Auto-select monetary input fields**: Implemented `MoneySpinBox` and `PercentSpinBox` widgets
+  - Auto-selects all text on click/focus for immediate typing
+  - No scroll wheel changes (prevents accidents)
+  - No spinner arrows (cleaner UI)
+  - Applied to all 6 view files with monetary inputs
+- **9.2 Refresh Recurring Charges on CC update**: Implemented cross-tab notification
+  - Added dirty flag pattern to RecurringChargesView
+  - CreditCardsView now marks RecurringChargesView dirty on add/edit/delete
+  - Recurring Charges tab auto-refreshes when switching to it after CC changes
+
 ## What's Next (Phase 9 - Future/Advanced)
 Phase 9 contains advanced features for future development:
 1. Tax estimation feature
@@ -101,11 +112,11 @@ Phase 9 contains advanced features for future development:
 3. Deferred interest purchase tracking
 4. Credit card statement parsing (PDF/CSV)
 5. Bank API integration (Plaid/Yodlee)
-6. Refresh Recurring Charges on CC update
+6. ~~Refresh Recurring Charges on CC update~~ ✓
 7. Paycheck/paystub parsing
 8. Modernize GUI appearance
 9. Dashboard Quick Update
-10. Auto-select monetary input fields
+10. ~~Auto-select monetary input fields~~ ✓
 
 ## Current Blockers
 None

@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QDialog, QFormLayout, QLineEdit,
     QComboBox, QHeaderView, QMessageBox, QLabel
 )
-from .widgets import NoScrollDoubleSpinBox, NoScrollSpinBox
+from .widgets import NoScrollSpinBox, MoneySpinBox, PercentSpinBox
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 
@@ -127,12 +127,23 @@ class CreditCardsView(QWidget):
         row = selected[0].row()
         return self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
 
+    def _notify_recurring_changes(self):
+        """Notify parent window that credit cards have changed"""
+        # Find main window and mark recurring charges view as dirty
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, 'recurring_view'):
+                parent.recurring_view.mark_dirty()
+                break
+            parent = parent.parent()
+
     def _add_card(self):
         """Add a new credit card"""
         dialog = CreditCardDialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             card = dialog.get_card()
             card.save()
+            self._notify_recurring_changes()
             self.refresh()
 
     def _edit_card(self):
@@ -149,6 +160,7 @@ class CreditCardsView(QWidget):
                 updated = dialog.get_card()
                 updated.id = card.id
                 updated.save()
+                self._notify_recurring_changes()
                 self.refresh()
 
     def _delete_card(self):
@@ -186,6 +198,7 @@ class CreditCardsView(QWidget):
             )
             if reply == QMessageBox.StandardButton.Yes:
                 card.delete()
+                self._notify_recurring_changes()
                 self.refresh()
             return
 
@@ -224,6 +237,7 @@ class CreditCardsView(QWidget):
 
             db.commit()
             card.delete()
+            self._notify_recurring_changes()
             self.refresh()
             QMessageBox.information(self, "Deleted", f"'{card.name}' has been deleted.")
 
@@ -251,22 +265,15 @@ class CreditCardDialog(QDialog):
         self.name_edit = QLineEdit()
         layout.addRow("Card Name:", self.name_edit)
 
-        self.limit_spin = NoScrollDoubleSpinBox()
-        self.limit_spin.setRange(0, 1000000)
-        self.limit_spin.setDecimals(2)
-        self.limit_spin.setPrefix("$")
+        self.limit_spin = MoneySpinBox()
+        self.limit_spin.setMinimum(0)
         layout.addRow("Credit Limit:", self.limit_spin)
 
-        self.balance_spin = NoScrollDoubleSpinBox()
-        self.balance_spin.setRange(0, 1000000)
-        self.balance_spin.setDecimals(2)
-        self.balance_spin.setPrefix("$")
+        self.balance_spin = MoneySpinBox()
+        self.balance_spin.setMinimum(0)
         layout.addRow("Current Balance:", self.balance_spin)
 
-        self.rate_spin = NoScrollDoubleSpinBox()
-        self.rate_spin.setRange(0, 100)
-        self.rate_spin.setDecimals(2)
-        self.rate_spin.setSuffix("%")
+        self.rate_spin = PercentSpinBox()
         layout.addRow("Interest Rate:", self.rate_spin)
 
         self.due_day_spin = NoScrollSpinBox()
@@ -278,10 +285,9 @@ class CreditCardDialog(QDialog):
         self.min_type_combo.currentIndexChanged.connect(self._on_min_type_changed)
         layout.addRow("Min Payment Type:", self.min_type_combo)
 
-        self.min_amount_spin = NoScrollDoubleSpinBox()
-        self.min_amount_spin.setRange(0, 100000)
-        self.min_amount_spin.setDecimals(2)
-        self.min_amount_spin.setPrefix("$")
+        self.min_amount_spin = MoneySpinBox()
+        self.min_amount_spin.setMinimum(0)
+        self.min_amount_spin.setMaximum(100000)
         self.min_amount_spin.setEnabled(False)
         layout.addRow("Min Payment Amount:", self.min_amount_spin)
 

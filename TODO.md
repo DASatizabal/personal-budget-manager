@@ -85,13 +85,15 @@
 *Nice-to-have, significant effort. Ordered by workflow optimization.*
 
 ### Quick Wins / Foundational
-- [ ] 9.1 Auto-select monetary input fields on click
+- [x] 9.1 Auto-select monetary input fields on click
   - All monetary input fields throughout the app should auto-highlight/select on click
   - User can immediately type new amount without manual selection
   - Assume 0 cents until decimal is typed (e.g., typing "150" = $150.00)
   - Remove up/down spinner arrows from monetary fields
   - Apply to: balance fields, amount fields, payment fields, etc.
-- [ ] 9.2 Refresh Recurring Charges tab when Credit Cards tab is updated
+  - **DONE**: Created `MoneySpinBox` and `PercentSpinBox` widgets in widgets.py
+- [x] 9.2 Refresh Recurring Charges tab when Credit Cards tab is updated
+  - **DONE**: Added dirty flag pattern to RecurringChargesView, CreditCardsView notifies on changes
 
 ### UI Improvements
 - [ ] 9.3 Dashboard "Quick Update" for balances

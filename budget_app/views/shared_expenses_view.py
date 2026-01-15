@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QHeaderView, QMessageBox, QGroupBox, QLabel,
     QGridLayout, QRadioButton, QButtonGroup
 )
-from .widgets import NoScrollDoubleSpinBox
+from .widgets import MoneySpinBox, PercentSpinBox
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
@@ -198,10 +198,9 @@ class SharedExpenseDialog(QDialog):
         self.name_edit = QLineEdit()
         layout.addRow("Name:", self.name_edit)
 
-        self.amount_spin = NoScrollDoubleSpinBox()
-        self.amount_spin.setRange(0, 100000)
-        self.amount_spin.setDecimals(2)
-        self.amount_spin.setPrefix("$")
+        self.amount_spin = MoneySpinBox()
+        self.amount_spin.setMinimum(0)
+        self.amount_spin.setMaximum(100000)
         self.amount_spin.valueChanged.connect(self._update_preview)
         layout.addRow("Monthly Amount:", self.amount_spin)
 
@@ -227,10 +226,7 @@ class SharedExpenseDialog(QDialog):
 
         layout.addRow("Split Type:", split_layout)
 
-        self.custom_spin = NoScrollDoubleSpinBox()
-        self.custom_spin.setRange(0, 100)
-        self.custom_spin.setDecimals(1)
-        self.custom_spin.setSuffix("%")
+        self.custom_spin = PercentSpinBox(decimals=1)
         self.custom_spin.setValue(50)
         self.custom_spin.setEnabled(False)
         self.custom_spin.valueChanged.connect(self._update_preview)

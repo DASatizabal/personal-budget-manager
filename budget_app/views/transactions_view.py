@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QHeaderView, QMessageBox, QDateEdit, QLabel,
     QCheckBox, QGroupBox, QProgressBar, QApplication, QMenu, QWidgetAction
 )
-from .widgets import NoScrollDoubleSpinBox, NoScrollSpinBox
+from .widgets import NoScrollSpinBox, MoneySpinBox
 from PyQt6.QtCore import Qt, QDate, QThread, pyqtSignal, QSettings
 from PyQt6.QtGui import QColor, QBrush, QCursor, QAction
 from datetime import datetime, timedelta, date
@@ -1401,10 +1401,7 @@ class TransactionDialog(QDialog):
         self.desc_edit = QLineEdit()
         layout.addRow("Description:", self.desc_edit)
 
-        self.amount_spin = NoScrollDoubleSpinBox()
-        self.amount_spin.setRange(-1000000, 1000000)
-        self.amount_spin.setDecimals(2)
-        self.amount_spin.setPrefix("$")
+        self.amount_spin = MoneySpinBox()
         layout.addRow("Amount (negative = expense):", self.amount_spin)
 
         self.method_combo = QComboBox()

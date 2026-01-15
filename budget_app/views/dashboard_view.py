@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QHeaderView, QGroupBox, QProgressBar, QPushButton,
     QDialog, QFormLayout, QMessageBox, QLineEdit
 )
-from .widgets import NoScrollDoubleSpinBox
+from .widgets import MoneySpinBox
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QColor
 from datetime import datetime, timedelta
@@ -354,10 +354,7 @@ class EditBalanceDialog(QDialog):
 
         layout.addRow(QLabel(f"Editing: {name}"))
 
-        self.balance_spin = NoScrollDoubleSpinBox()
-        self.balance_spin.setRange(-1000000, 1000000)
-        self.balance_spin.setDecimals(2)
-        self.balance_spin.setPrefix("$")
+        self.balance_spin = MoneySpinBox()
         self.balance_spin.setValue(current_balance)
 
         if self.is_credit_card:
@@ -406,17 +403,9 @@ class UpdateAllBalancesDialog(QDialog):
 
         self.account_spins = {}
         for account in Account.get_all():
-            spin = NoScrollDoubleSpinBox()
-            spin.setRange(-1000000, 1000000)
-            spin.setDecimals(2)
+            spin = MoneySpinBox()
             spin.setValue(account.current_balance)
-            # Create row with $ label
-            row_widget = QWidget()
-            row_layout = QHBoxLayout(row_widget)
-            row_layout.setContentsMargins(0, 0, 0, 0)
-            row_layout.addWidget(QLabel("$"))
-            row_layout.addWidget(spin)
-            accounts_layout.addRow(f"{account.name}:", row_widget)
+            accounts_layout.addRow(f"{account.name}:", spin)
             self.account_spins[account.id] = spin
 
         layout.addWidget(accounts_group)
@@ -427,17 +416,10 @@ class UpdateAllBalancesDialog(QDialog):
 
         self.card_spins = {}
         for card in CreditCard.get_all():
-            spin = NoScrollDoubleSpinBox()
-            spin.setRange(0, 1000000)
-            spin.setDecimals(2)
+            spin = MoneySpinBox()
+            spin.setMinimum(0)  # Credit card balance can't be negative
             spin.setValue(card.current_balance)
-            # Create row with $ label
-            row_widget = QWidget()
-            row_layout = QHBoxLayout(row_widget)
-            row_layout.setContentsMargins(0, 0, 0, 0)
-            row_layout.addWidget(QLabel("$"))
-            row_layout.addWidget(spin)
-            cards_layout.addRow(f"{card.name}:", row_widget)
+            cards_layout.addRow(f"{card.name}:", spin)
             self.card_spins[card.id] = spin
 
         layout.addWidget(cards_group)
@@ -450,17 +432,10 @@ class UpdateAllBalancesDialog(QDialog):
 
             self.loan_spins = {}
             for loan in loans:
-                spin = NoScrollDoubleSpinBox()
-                spin.setRange(0, 1000000)
-                spin.setDecimals(2)
+                spin = MoneySpinBox()
+                spin.setMinimum(0)  # Loan balance can't be negative
                 spin.setValue(loan.current_balance)
-                # Create row with $ label
-                row_widget = QWidget()
-                row_layout = QHBoxLayout(row_widget)
-                row_layout.setContentsMargins(0, 0, 0, 0)
-                row_layout.addWidget(QLabel("$"))
-                row_layout.addWidget(spin)
-                loans_layout.addRow(f"{loan.name}:", row_widget)
+                loans_layout.addRow(f"{loan.name}:", spin)
                 self.loan_spins[loan.id] = spin
 
             layout.addWidget(loans_group)

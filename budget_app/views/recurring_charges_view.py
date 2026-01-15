@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QHeaderView, QMessageBox, QCheckBox,
     QLabel, QGroupBox, QRadioButton, QDateEdit
 )
-from .widgets import NoScrollDoubleSpinBox, NoScrollSpinBox
+from .widgets import NoScrollSpinBox, MoneySpinBox
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QColor
 
@@ -19,8 +19,13 @@ class RecurringChargesView(QWidget):
 
     def __init__(self):
         super().__init__()
+        self._data_dirty = True  # Track if data needs reload
         self._setup_ui()
         self.refresh()
+
+    def mark_dirty(self):
+        """Mark data as dirty so next refresh reloads from database"""
+        self._data_dirty = True
 
     def _setup_ui(self):
         """Set up the UI"""
@@ -46,11 +51,11 @@ class RecurringChargesView(QWidget):
         toolbar.addStretch()
 
         self.show_inactive = QCheckBox("Show Inactive")
-        self.show_inactive.stateChanged.connect(self.refresh)
+        self.show_inactive.stateChanged.connect(lambda: self.refresh(force=True))
         toolbar.addWidget(self.show_inactive)
 
         refresh_btn = QPushButton("Refresh")
-        refresh_btn.clicked.connect(self.refresh)
+        refresh_btn.clicked.connect(lambda: self.refresh(force=True))
         toolbar.addWidget(refresh_btn)
 
         layout.addLayout(toolbar)
@@ -68,8 +73,12 @@ class RecurringChargesView(QWidget):
         self.table.doubleClicked.connect(self._edit_charge)
         layout.addWidget(self.table)
 
-    def refresh(self):
+    def refresh(self, force: bool = False):
         """Refresh the table data"""
+        if not force and not self._data_dirty:
+            return
+        self._data_dirty = False
+
         active_only = not self.show_inactive.isChecked()
         charges = RecurringCharge.get_all(active_only=active_only)
         self.table.setRowCount(len(charges))
@@ -133,7 +142,7 @@ class RecurringChargesView(QWidget):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             charge = dialog.get_charge()
             charge.save()
-            self.refresh()
+            self.refresh(force=True)
 
     def _edit_charge(self):
         """Edit the selected recurring charge"""
@@ -149,7 +158,7 @@ class RecurringChargesView(QWidget):
                 updated = dialog.get_charge()
                 updated.id = charge.id
                 updated.save()
-                self.refresh()
+                self.refresh(force=True)
 
     def _delete_charge(self):
         """Delete the selected recurring charge"""
@@ -186,7 +195,7 @@ class RecurringChargesView(QWidget):
 
                 db.commit()
                 charge.delete()
-                self.refresh()
+                self.refresh(force=True)
 
 
 class DeleteRecurringChargeDialog(QDialog):
@@ -302,10 +311,7 @@ class RecurringChargeDialog(QDialog):
         self.name_edit = QLineEdit()
         layout.addRow("Name:", self.name_edit)
 
-        self.amount_spin = NoScrollDoubleSpinBox()
-        self.amount_spin.setRange(-1000000, 1000000)
-        self.amount_spin.setDecimals(2)
-        self.amount_spin.setPrefix("$")
+        self.amount_spin = MoneySpinBox()
         layout.addRow("Amount (negative = expense):", self.amount_spin)
 
         self.day_spin = NoScrollSpinBox()
