@@ -104,18 +104,40 @@ Replace Excel-based budget tracking with a Python desktop application. Currently
   - Added dirty flag pattern to RecurringChargesView
   - CreditCardsView now marks RecurringChargesView dirty on add/edit/delete
   - Recurring Charges tab auto-refreshes when switching to it after CC changes
+- **9.3 Dashboard Quick Update**: Enhanced existing UpdateAllBalancesDialog
+  - Renamed button to "Quick Update" with Ctrl+U shortcut
+  - Added scroll area for better usability with many accounts
+- **9.4 Modernize GUI with qdarkstyle**: Applied modern dark theme
+  - Installed qdarkstyle library
+  - Theme toggle (View > Dark Mode) switches between dark/light palettes
+  - Removed 150+ lines of custom CSS
+- **9.5 Credit Card Payoff Planner**: Full implementation with 5 strategies
+  - Avalanche: Highest APR first (mathematically optimal)
+  - Snowball: Lowest balance first (psychological wins)
+  - Hybrid: 60% APR + 40% balance weight
+  - High Utilization: Improves credit score fastest
+  - Cash on Hand: Minimum payments only
+  - Comparison table with payoff dates, total interest, monthly averages
+  - Detailed payment schedule breakdown
+- **9.6/9.7 PDF Import placeholders**: Created placeholder tab for future PDF parsing
+- **9.9 Deferred Interest Tracking**: Full implementation
+  - Track 0% APR promotional purchases
+  - Risk level indicators (Expired, High, Medium, Low)
+  - Alerts for expiring promotions
+  - Calculate potential retroactive interest
+- **9.10 Bank API placeholder**: Created placeholder tab for future Plaid/Yodlee integration
 
 ## What's Next (Phase 9 - Future/Advanced)
-Phase 9 contains advanced features for future development:
-1. Tax estimation feature
-2. Credit Card Payoff Planner (avalanche, snowball, hybrid, cashflow methods)
-3. Deferred interest purchase tracking
-4. Credit card statement parsing (PDF/CSV)
-5. Bank API integration (Plaid/Yodlee)
+Most Phase 9 features are now complete. Remaining placeholders for future development:
+1. ~~Tax estimation feature~~ (Skipped per user request)
+2. ~~Credit Card Payoff Planner~~ ✓
+3. ~~Deferred interest purchase tracking~~ ✓
+4. Credit card statement parsing (PDF/CSV) - placeholder created
+5. Bank API integration (Plaid/Yodlee) - placeholder created
 6. ~~Refresh Recurring Charges on CC update~~ ✓
-7. Paycheck/paystub parsing
-8. Modernize GUI appearance
-9. Dashboard Quick Update
+7. Paycheck/paystub parsing - placeholder created
+8. ~~Modernize GUI appearance~~ ✓
+9. ~~Dashboard Quick Update~~ ✓
 10. ~~Auto-select monetary input fields~~ ✓
 
 ## Current Blockers
@@ -137,10 +159,14 @@ First run: Use File > Import from Excel to load data from your Excel workbook.
 | `budget_app/views/dashboard_view.py` | Main dashboard with balance editing |
 | `budget_app/views/transactions_view.py` | Transaction ledger with recurring generation |
 | `budget_app/views/posted_transactions_view.py` | Posted transactions history view |
-| `budget_app/views/widgets.py` | Custom no-scroll spinbox widgets |
+| `budget_app/views/payoff_planner_view.py` | Credit card payoff strategy comparison |
+| `budget_app/views/deferred_interest_view.py` | 0% APR promotional purchase tracking |
+| `budget_app/views/widgets.py` | Custom MoneySpinBox and PercentSpinBox widgets |
 | `budget_app/utils/excel_import.py` | Excel data import |
 | `budget_app/utils/calculations.py` | Running balance & projection calculations |
+| `budget_app/utils/payoff_calculator.py` | Credit card payoff strategy calculations |
 | `budget_app/models/database.py` | SQLite schema and connection |
+| `budget_app/models/deferred_interest.py` | Deferred interest purchase model |
 
 ## Open Questions / Assumptions
 - Excel file contains personal financial data and is excluded from git

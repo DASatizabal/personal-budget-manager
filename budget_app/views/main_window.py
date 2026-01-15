@@ -4,10 +4,12 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTabWidget, QMenuBar, QMenu, QStatusBar, QMessageBox,
     QFileDialog, QPushButton, QLabel, QDialog, QCheckBox,
-    QGroupBox, QDialogButtonBox, QDateEdit
+    QGroupBox, QDialogButtonBox, QDateEdit, QApplication
 )
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QAction, QKeySequence
+import qdarkstyle
+from qdarkstyle.light.palette import LightPalette
 
 from .dashboard_view import DashboardView
 from .credit_cards_view import CreditCardsView
@@ -16,6 +18,10 @@ from .transactions_view import TransactionsView
 from .posted_transactions_view import PostedTransactionsView
 from .paycheck_view import PaycheckView
 from .shared_expenses_view import SharedExpensesView
+from .pdf_import_view import PDFImportView
+from .bank_api_view import BankAPIView
+from .deferred_interest_view import DeferredInterestView
+from .payoff_planner_view import PayoffPlannerView
 from ..models.database import init_db
 from ..utils.excel_import import import_from_excel
 from ..utils.backup import (
@@ -53,15 +59,23 @@ class MainWindow(QMainWindow):
         self.posted_transactions_view = PostedTransactionsView()
         self.paycheck_view = PaycheckView()
         self.shared_expenses_view = SharedExpensesView()
+        self.pdf_import_view = PDFImportView()
+        self.bank_api_view = BankAPIView()
+        self.deferred_interest_view = DeferredInterestView()
+        self.payoff_planner_view = PayoffPlannerView()
 
         # Add tabs
         self.tabs.addTab(self.dashboard_view, "Dashboard")
         self.tabs.addTab(self.transactions_view, "Transactions")
         self.tabs.addTab(self.posted_transactions_view, "Posted")
         self.tabs.addTab(self.credit_cards_view, "Credit Cards")
+        self.tabs.addTab(self.payoff_planner_view, "Payoff Planner")
+        self.tabs.addTab(self.deferred_interest_view, "Deferred Interest")
         self.tabs.addTab(self.recurring_view, "Recurring Charges")
         self.tabs.addTab(self.paycheck_view, "Paycheck")
         self.tabs.addTab(self.shared_expenses_view, "Lisa Payments")
+        self.tabs.addTab(self.pdf_import_view, "PDF Import")
+        self.tabs.addTab(self.bank_api_view, "Bank API")
 
         # Connect tab change to refresh
         self.tabs.currentChanged.connect(self._on_tab_changed)
@@ -74,8 +88,7 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("Ready")
 
-        # Apply dark mode by default
-        self._apply_dark_mode()
+        # Theme is applied in main.py via qdarkstyle
 
     def _create_menu_bar(self):
         """Create the application menu bar"""
@@ -379,164 +392,12 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage("Balances updated", 2000)
 
     def _toggle_dark_mode(self, checked: bool):
-        """Toggle dark mode on/off"""
+        """Toggle between dark and light themes using qdarkstyle"""
+        app = QApplication.instance()
         if checked:
-            self._apply_dark_mode()
+            app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt6'))
         else:
-            self._apply_light_mode()
-
-    def _apply_dark_mode(self):
-        """Apply dark mode styling"""
-        self.setStyleSheet("""
-            QMainWindow, QWidget {
-                background-color: #1e1e1e;
-                color: #d4d4d4;
-            }
-            QTabWidget::pane {
-                border: 1px solid #3c3c3c;
-                background-color: #252526;
-            }
-            QTabBar::tab {
-                background-color: #2d2d2d;
-                color: #d4d4d4;
-                padding: 8px 16px;
-                margin-right: 2px;
-                border-top-left-radius: 4px;
-                border-top-right-radius: 4px;
-            }
-            QTabBar::tab:selected {
-                background-color: #1e1e1e;
-                border-bottom: 2px solid #007acc;
-            }
-            QTabBar::tab:hover:!selected {
-                background-color: #3c3c3c;
-            }
-            QTableWidget, QTableView {
-                background-color: #1e1e1e;
-                alternate-background-color: #252526;
-                gridline-color: #3c3c3c;
-                border: 1px solid #3c3c3c;
-            }
-            QTableWidget::item, QTableView::item {
-                padding: 6px 8px;
-            }
-            QTableWidget::item:selected, QTableView::item:selected {
-                background-color: #264f78;
-            }
-            QHeaderView::section {
-                background-color: #2d2d2d;
-                color: #d4d4d4;
-                padding: 8px 12px;
-                border: none;
-                border-right: 1px solid #3c3c3c;
-                border-bottom: 1px solid #3c3c3c;
-                font-weight: bold;
-            }
-            QPushButton {
-                background-color: #0e639c;
-                color: white;
-                border: none;
-                padding: 8px 20px;
-                border-radius: 4px;
-                min-width: 80px;
-            }
-            QPushButton:hover {
-                background-color: #1177bb;
-            }
-            QPushButton:pressed {
-                background-color: #0d5a8c;
-            }
-            QPushButton:disabled {
-                background-color: #3c3c3c;
-                color: #808080;
-            }
-            QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QDateEdit {
-                background-color: #3c3c3c;
-                color: #d4d4d4;
-                border: 1px solid #555555;
-                padding: 4px 8px;
-                border-radius: 4px;
-            }
-            QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus, QDateEdit:focus {
-                border: 1px solid #007acc;
-            }
-            QComboBox::drop-down {
-                border: none;
-            }
-            QComboBox::down-arrow {
-                image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 6px solid #d4d4d4;
-                margin-right: 8px;
-            }
-            QMenuBar {
-                background-color: #2d2d2d;
-                color: #d4d4d4;
-            }
-            QMenuBar::item:selected {
-                background-color: #3c3c3c;
-            }
-            QMenu {
-                background-color: #2d2d2d;
-                color: #d4d4d4;
-                border: 1px solid #3c3c3c;
-            }
-            QMenu::item:selected {
-                background-color: #094771;
-            }
-            QStatusBar {
-                background-color: #007acc;
-                color: white;
-            }
-            QScrollBar:vertical {
-                background-color: #1e1e1e;
-                width: 12px;
-            }
-            QScrollBar::handle:vertical {
-                background-color: #5a5a5a;
-                border-radius: 6px;
-                min-height: 20px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background-color: #7a7a7a;
-            }
-            QScrollBar:horizontal {
-                background-color: #1e1e1e;
-                height: 12px;
-            }
-            QScrollBar::handle:horizontal {
-                background-color: #5a5a5a;
-                border-radius: 6px;
-                min-width: 20px;
-            }
-            QLabel {
-                color: #d4d4d4;
-            }
-            QGroupBox {
-                border: 1px solid #3c3c3c;
-                border-radius: 6px;
-                margin-top: 12px;
-                padding: 16px 12px 12px 12px;
-                font-weight: bold;
-            }
-            QGroupBox::title {
-                color: #d4d4d4;
-                subcontrol-origin: margin;
-                left: 12px;
-                padding: 0 4px;
-            }
-            QDialog {
-                background-color: #252526;
-            }
-            QFormLayout {
-                spacing: 12px;
-            }
-        """)
-
-    def _apply_light_mode(self):
-        """Apply light mode styling"""
-        self.setStyleSheet("")  # Reset to default
+            app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt6', palette=LightPalette))
 
     def _show_about(self):
         """Show about dialog"""

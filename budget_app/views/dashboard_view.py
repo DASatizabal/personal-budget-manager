@@ -4,7 +4,8 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QFrame, QTableWidget, QTableWidgetItem,
     QHeaderView, QGroupBox, QProgressBar, QPushButton,
-    QDialog, QFormLayout, QMessageBox, QLineEdit
+    QDialog, QFormLayout, QMessageBox, QLineEdit,
+    QScrollArea
 )
 from .widgets import MoneySpinBox
 from PyQt6.QtCore import Qt
@@ -36,10 +37,11 @@ class DashboardView(QWidget):
         # Toolbar
         toolbar = QHBoxLayout()
 
-        update_balances_btn = QPushButton("Update Balances")
-        update_balances_btn.setToolTip("Manually update account and credit card balances")
-        update_balances_btn.clicked.connect(self._show_update_balances_dialog)
-        toolbar.addWidget(update_balances_btn)
+        quick_update_btn = QPushButton("Quick Update")
+        quick_update_btn.setToolTip("Update all balances in one place (Ctrl+U)")
+        quick_update_btn.setShortcut("Ctrl+U")
+        quick_update_btn.clicked.connect(self._show_update_balances_dialog)
+        toolbar.addWidget(quick_update_btn)
 
         toolbar.addStretch()
 
@@ -378,12 +380,13 @@ class EditBalanceDialog(QDialog):
 
 
 class UpdateAllBalancesDialog(QDialog):
-    """Dialog for updating all balances at once"""
+    """Dialog for quick updating all balances at once"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Update All Balances")
-        self.setMinimumWidth(500)
+        self.setWindowTitle("Quick Update - All Balances")
+        self.setMinimumWidth(450)
+        self.setMinimumHeight(500)
         self._setup_ui()
 
     def _setup_ui(self):
@@ -391,11 +394,19 @@ class UpdateAllBalancesDialog(QDialog):
 
         # Instructions
         info = QLabel(
-            "Update your current balances below. These should match your actual "
-            "bank/credit card statements."
+            "Update all balances to match your statements. Tab through fields, then Save All."
         )
         info.setWordWrap(True)
         layout.addWidget(info)
+
+        # Scroll area for all balance fields
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setSpacing(12)
 
         # Accounts section
         accounts_group = QGroupBox("Bank Accounts")
@@ -408,7 +419,7 @@ class UpdateAllBalancesDialog(QDialog):
             accounts_layout.addRow(f"{account.name}:", spin)
             self.account_spins[account.id] = spin
 
-        layout.addWidget(accounts_group)
+        scroll_layout.addWidget(accounts_group)
 
         # Credit Cards section
         cards_group = QGroupBox("Credit Cards (Enter amount OWED)")
@@ -422,7 +433,7 @@ class UpdateAllBalancesDialog(QDialog):
             cards_layout.addRow(f"{card.name}:", spin)
             self.card_spins[card.id] = spin
 
-        layout.addWidget(cards_group)
+        scroll_layout.addWidget(cards_group)
 
         # Loans section
         loans = Loan.get_all()
@@ -438,14 +449,19 @@ class UpdateAllBalancesDialog(QDialog):
                 loans_layout.addRow(f"{loan.name}:", spin)
                 self.loan_spins[loan.id] = spin
 
-            layout.addWidget(loans_group)
+            scroll_layout.addWidget(loans_group)
         else:
             self.loan_spins = {}
+
+        scroll_layout.addStretch()
+        scroll.setWidget(scroll_content)
+        layout.addWidget(scroll, 1)
 
         # Buttons
         btn_layout = QHBoxLayout()
         save_btn = QPushButton("Save All")
         save_btn.clicked.connect(self._save_all)
+        save_btn.setDefault(True)
         cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addStretch()

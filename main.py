@@ -5,6 +5,9 @@ import sys
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
 
+# Modern dark theme
+import qdarkstyle
+
 from budget_app.views.main_window import MainWindow
 
 
@@ -19,6 +22,9 @@ def main():
     app.setApplicationName("Personal Budget Manager")
     app.setOrganizationName("BudgetApp")
     app.setApplicationVersion("1.0.0")
+
+    # Apply modern dark theme
+    app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt6'))
 
     # Create and show main window
     window = MainWindow()

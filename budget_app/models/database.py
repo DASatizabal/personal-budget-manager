@@ -166,10 +166,28 @@ def init_db():
         )
     """)
 
+    # Deferred Interest Purchases table (0% APR promotional periods)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS deferred_purchases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            credit_card_id INTEGER NOT NULL,
+            description TEXT NOT NULL,
+            purchase_amount REAL NOT NULL,
+            remaining_balance REAL NOT NULL,
+            promo_apr REAL NOT NULL DEFAULT 0.0,
+            standard_apr REAL NOT NULL,
+            promo_end_date TEXT NOT NULL,
+            min_monthly_payment REAL,
+            created_date TEXT NOT NULL,
+            FOREIGN KEY (credit_card_id) REFERENCES credit_cards(id)
+        )
+    """)
+
     # Create indexes for performance
     db.execute("CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_transactions_payment_method ON transactions(payment_method)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_recurring_day ON recurring_charges(day_of_month)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_deferred_promo_end ON deferred_purchases(promo_end_date)")
 
     # Migration: Add pay_day_of_week column if not exists (default Friday = 4)
     try:

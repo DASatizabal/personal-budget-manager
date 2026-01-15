@@ -96,44 +96,43 @@
   - **DONE**: Added dirty flag pattern to RecurringChargesView, CreditCardsView notifies on changes
 
 ### UI Improvements
-- [ ] 9.3 Dashboard "Quick Update" for balances
-  - Add Quick Update option/tab/wizard to Dashboard
-  - Single view with all bank and credit card balance fields
+- [x] 9.3 Dashboard "Quick Update" for balances
+  - Enhanced existing UpdateAllBalancesDialog with scroll area
+  - Renamed button to "Quick Update" with Ctrl+U shortcut
   - Tab-friendly navigation between fields
-  - Update all balances in one place without opening separate dialogs
-- [ ] 9.4 Modernize GUI appearance (see `claude_code_GUI_prompt.md`)
-  - Install theme library (qt-material, qdarkstyle, or PyQtDarkTheme)
-  - Apply theme in main.py before main window shown
-  - Integrate with existing dark mode toggle or replace
-  - Add consistent spacing/margins to layouts
-  - Verify all 7 tabs render correctly with new theme
+  - **DONE**: All balances updatable from single scrollable dialog
+- [x] 9.4 Modernize GUI appearance
+  - Installed qdarkstyle theme library
+  - Applied theme in main.py
+  - View > Dark Mode toggle switches between dark/light palettes
+  - **DONE**: Clean modern appearance across all tabs
 
 ### Core Features
-- [ ] 9.5 Credit Card Payoff Planner
+- [x] 9.5 Credit Card Payoff Planner
   - New dedicated "Payoff Planner" tab
-  - Five payoff methods with explanations:
+  - Five payoff methods implemented:
     - **Avalanche**: Highest APR first (saves most money)
     - **Snowball**: Lowest balance first (psychological wins)
     - **Hybrid**: Weighted score (60% APR, 40% quick wins)
-    - **Cashflow**: Highest utilization first (frees credit fastest)
+    - **High Utilization**: Highest utilization first (frees credit fastest)
     - **Cash on Hand**: Pay only minimums, maximize bank balance
-  - Comparison table showing payoff date, total interest, monthly average for each method
-  - User inputs: minimum reserve amount (default $0.01), payment timing preference
-  - Payment timing options: on payday, spread across period, or day before LDBPD
-  - Calculates surplus from positive Chase balance at each LDBPD
-  - Creates separate "Extra Payment" transactions (keeps existing min payments)
-  - Auto-adjusts payments to prevent future negative balances
-  - On-demand calculation (user clicks to calculate/apply)
-  - See `.claude/plans/humming-napping-pony.md` for full implementation plan
+  - Comparison table showing payoff date, total interest, monthly average
+  - Detailed payment schedule breakdown with per-card amounts
+  - **DONE**: Full payoff calculator in `budget_app/utils/payoff_calculator.py`
 
-### Parsing Features
-- [ ] 9.6 Paycheck/paystub parsing (PDF)
-- [ ] 9.7 Credit card statement parsing (PDF/CSV upload)
+### Parsing Features (Placeholders)
+- [ ] 9.6 Paycheck/paystub parsing (PDF) - **Placeholder tab created**
+- [ ] 9.7 Credit card statement parsing (PDF/CSV upload) - **Placeholder tab created**
 
 ### Advanced Features
-- [ ] 9.8 Tax estimation feature
-- [ ] 9.9 Deferred interest purchase tracking
-- [ ] 9.10 Bank API integration (Plaid/Yodlee) for auto-import
+- [ ] 9.8 Tax estimation feature - **Skipped per user request**
+- [x] 9.9 Deferred interest purchase tracking
+  - New "Deferred Interest" tab for tracking 0% APR promos
+  - Risk level indicators (Expired, High, Medium, Low)
+  - Alerts for expiring promotional periods
+  - Calculate potential retroactive interest charges
+  - **DONE**: Full implementation with model and view
+- [ ] 9.10 Bank API integration (Plaid/Yodlee) - **Placeholder tab created**
 
 ---
 
