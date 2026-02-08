@@ -50,6 +50,9 @@ Thumbs.db
 # Auto-backup directory
 auto_backups/
 
+# Financial statement files (contains personal account data)
+Statement Files/
+
 # Claude settings
 .claude/
 tmpclaude-*
