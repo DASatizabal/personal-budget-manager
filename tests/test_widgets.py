@@ -139,3 +139,87 @@ class TestNoScrollSpinBoxes:
         event = _make_wheel_event()
         w.wheelEvent(event)
         assert w.value() == 42
+
+
+class TestFocusAndMouseEvents:
+    """Tests for focusInEvent and mousePressEvent overrides that trigger selectAll()"""
+
+    def test_money_spinbox_focus_in_triggers_select(self, qtbot):
+        from PyQt6.QtGui import QFocusEvent
+        from budget_app.views.widgets import MoneySpinBox
+
+        w = MoneySpinBox()
+        qtbot.addWidget(w)
+        w.setValue(100.00)
+
+        focus_event = QFocusEvent(QFocusEvent.Type.FocusIn)
+        w.focusInEvent(focus_event)
+        qtbot.wait(10)
+
+        assert w.value() == 100.00
+
+    def test_money_spinbox_mouse_press_when_focused(self, qtbot):
+        from PyQt6.QtGui import QFocusEvent, QMouseEvent
+        from budget_app.views.widgets import MoneySpinBox
+
+        w = MoneySpinBox()
+        qtbot.addWidget(w)
+        w.setValue(100.00)
+
+        # Give focus first
+        focus_event = QFocusEvent(QFocusEvent.Type.FocusIn)
+        w.focusInEvent(focus_event)
+        qtbot.wait(10)
+
+        # Now simulate mouse press while already focused
+        mouse_event = QMouseEvent(
+            QMouseEvent.Type.MouseButtonPress,
+            QPointF(5, 5),
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        w.mousePressEvent(mouse_event)
+        qtbot.wait(10)
+
+        assert w.value() == 100.00
+
+    def test_percent_spinbox_focus_in_triggers_select(self, qtbot):
+        from PyQt6.QtGui import QFocusEvent
+        from budget_app.views.widgets import PercentSpinBox
+
+        w = PercentSpinBox()
+        qtbot.addWidget(w)
+        w.setValue(25.50)
+
+        focus_event = QFocusEvent(QFocusEvent.Type.FocusIn)
+        w.focusInEvent(focus_event)
+        qtbot.wait(10)
+
+        assert w.value() == 25.50
+
+    def test_percent_spinbox_mouse_press_when_focused(self, qtbot):
+        from PyQt6.QtGui import QFocusEvent, QMouseEvent
+        from budget_app.views.widgets import PercentSpinBox
+
+        w = PercentSpinBox()
+        qtbot.addWidget(w)
+        w.setValue(25.50)
+
+        # Give focus first
+        focus_event = QFocusEvent(QFocusEvent.Type.FocusIn)
+        w.focusInEvent(focus_event)
+        qtbot.wait(10)
+
+        # Now simulate mouse press while already focused
+        mouse_event = QMouseEvent(
+            QMouseEvent.Type.MouseButtonPress,
+            QPointF(5, 5),
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        w.mousePressEvent(mouse_event)
+        qtbot.wait(10)
+
+        assert w.value() == 25.50

@@ -372,3 +372,339 @@ class TestGenerateRecurringDialog:
         dialog = GenerateRecurringDialog()
         qtbot.addWidget(dialog)
         assert dialog.windowTitle() == "Generate Recurring Transactions"
+
+
+class TestTransactionsViewRefresh:
+    """Tests for the refresh() method with actual transaction data"""
+
+    def _make_view(self, qtbot, from_date_str="2026-01-01", to_date_str="2026-12-31"):
+        """Helper to create a TransactionsView with a wide date range.
+        Disables auto-generation of recurring transactions on first load."""
+        from budget_app.views.transactions_view import TransactionsView
+        from PyQt6.QtCore import QDate
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        view._first_load = False  # Prevent auto-generation of recurring transactions
+        view.from_date.setDate(QDate.fromString(from_date_str, "yyyy-MM-dd"))
+        view.to_date.setDate(QDate.fromString(to_date_str, "yyyy-MM-dd"))
+        return view
+
+    def test_refresh_populates_table(self, qtbot, temp_db, sample_card, sample_transactions):
+        """After calling refresh(), table has rows for non-posted transactions (3 of the 4)"""
+        view = self._make_view(qtbot)
+        view.refresh()
+        # 4 sample transactions, but 1 is posted and filtered out
+        assert view.table.rowCount() == 3
+
+    def test_refresh_skips_when_not_dirty(self, qtbot, temp_db):
+        """Create view, manually clear table, call refresh() - should be no-op since _data_dirty is already False"""
+        view = self._make_view(qtbot)
+        view.refresh()  # First refresh: sets _data_dirty = False
+        # Manually clear the table to detect if refresh repopulates
+        view.table.setRowCount(0)
+        view.refresh()  # Should be a no-op since _data_dirty is False and dates unchanged
+        assert view.table.rowCount() == 0
+
+    def test_recurring_description_highlighted_blue(self, qtbot, temp_db, sample_card):
+        """Recurring transactions have description highlighted in blue (#64b5f6)"""
+        from budget_app.models.recurring_charge import RecurringCharge
+        from budget_app.models.transaction import Transaction
+        from PyQt6.QtGui import QColor
+
+        charge = RecurringCharge(
+            id=None, name='Test Recurring', amount=-25.0,
+            day_of_month=10, payment_method='C',
+            frequency='MONTHLY', amount_type='FIXED'
+        )
+        charge.save()
+
+        trans = Transaction(
+            id=None, date='2026-02-10', description='Test Recurring',
+            amount=-25.0, payment_method='C',
+            recurring_charge_id=charge.id, is_posted=False
+        )
+        trans.save()
+
+        view = self._make_view(qtbot)
+        view.refresh()
+
+        # Find the row with recurring_charge_id set (description column = 3)
+        found = False
+        for row in range(view.table.rowCount()):
+            desc_item = view.table.item(row, 3)
+            if desc_item and desc_item.text() == 'Test Recurring':
+                assert desc_item.foreground().color() == QColor("#64b5f6")
+                found = True
+                break
+        assert found, "Recurring transaction row not found"
+
+    def test_amount_color_negative_red(self, qtbot, temp_db, sample_card, sample_transactions):
+        """Negative amounts have color #f44336"""
+        from PyQt6.QtGui import QColor
+        view = self._make_view(qtbot)
+        view.refresh()
+
+        # Find a negative amount row (e.g., Groceries -150.0)
+        found = False
+        for row in range(view.table.rowCount()):
+            amount_item = view.table.item(row, 4)
+            if amount_item:
+                amount_text = amount_item.text().replace('$', '').replace(',', '').strip()
+                try:
+                    amount = float(amount_text)
+                    if amount < 0:
+                        assert amount_item.foreground().color() == QColor("#f44336")
+                        found = True
+                        break
+                except ValueError:
+                    pass
+        assert found, "No negative amount row found"
+
+    def test_amount_color_positive_green(self, qtbot, temp_db, sample_card, sample_transactions):
+        """Positive amounts have color #4caf50"""
+        from PyQt6.QtGui import QColor
+        view = self._make_view(qtbot)
+        view.refresh()
+
+        # Find a positive amount row (e.g., Paycheck 2500.0)
+        found = False
+        for row in range(view.table.rowCount()):
+            amount_item = view.table.item(row, 4)
+            if amount_item:
+                amount_text = amount_item.text().replace('$', '').replace(',', '').strip()
+                try:
+                    amount = float(amount_text)
+                    if amount > 0:
+                        assert amount_item.foreground().color() == QColor("#4caf50")
+                        found = True
+                        break
+                except ValueError:
+                    pass
+        assert found, "No positive amount row found"
+
+    def test_chase_balance_negative_red(self, qtbot, temp_db, sample_account, sample_card):
+        """Create transaction that makes chase balance negative, verify chase balance column (5) color is red"""
+        from budget_app.models.transaction import Transaction
+        from budget_app.models.account import Account
+        from PyQt6.QtGui import QColor
+
+        # sample_account has balance 5000. Create a large expense to drive it negative.
+        trans = Transaction(
+            id=None, date='2026-02-10', description='Huge Expense',
+            amount=-10000.0, payment_method='C', is_posted=False
+        )
+        trans.save()
+
+        view = self._make_view(qtbot)
+        view.refresh()
+
+        # Find the row for Huge Expense and check chase balance color
+        found = False
+        for row in range(view.table.rowCount()):
+            desc_item = view.table.item(row, 3)
+            if desc_item and desc_item.text() == 'Huge Expense':
+                chase_item = view.table.item(row, 5)
+                assert chase_item.foreground().color() == QColor("#f44336")
+                found = True
+                break
+        assert found, "Huge Expense row not found"
+
+
+class TestTransactionsViewApplyFilters:
+    """Tests for _apply_filters()"""
+
+    def _make_view_with_data(self, qtbot, temp_db, sample_card, sample_transactions):
+        """Helper to create a view with sample data and refresh it.
+        Disables auto-generation of recurring transactions on first load."""
+        from budget_app.views.transactions_view import TransactionsView
+        from PyQt6.QtCore import QDate
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        view._first_load = False  # Prevent auto-generation of recurring transactions
+        view.from_date.setDate(QDate.fromString("2026-01-01", "yyyy-MM-dd"))
+        view.to_date.setDate(QDate.fromString("2026-12-31", "yyyy-MM-dd"))
+        view.refresh()
+        return view
+
+    def test_desc_filter_hides_non_matching(self, qtbot, temp_db, sample_card, sample_transactions):
+        """Set desc_filter to 'Pay', verify rows with 'Paycheck' visible, 'Groceries' hidden"""
+        view = self._make_view_with_data(qtbot, temp_db, sample_card, sample_transactions)
+        view.desc_filter.setText("Pay")
+        # _apply_filters is called automatically via textChanged signal,
+        # but call explicitly to be sure
+        view._apply_filters()
+
+        for row in range(view.table.rowCount()):
+            desc_item = view.table.item(row, 3)
+            if desc_item:
+                if "Paycheck" in desc_item.text():
+                    assert not view.table.isRowHidden(row), "Paycheck row should be visible"
+                elif "Groceries" in desc_item.text():
+                    assert view.table.isRowHidden(row), "Groceries row should be hidden"
+
+    def test_desc_filter_case_insensitive(self, qtbot, temp_db, sample_card, sample_transactions):
+        """Use lowercase filter, still matches"""
+        view = self._make_view_with_data(qtbot, temp_db, sample_card, sample_transactions)
+        view.desc_filter.setText("pay")
+        view._apply_filters()
+
+        for row in range(view.table.rowCount()):
+            desc_item = view.table.item(row, 3)
+            if desc_item and "Paycheck" in desc_item.text():
+                assert not view.table.isRowHidden(row), "Paycheck row should be visible with lowercase filter"
+                return
+        pytest.fail("Paycheck row not found in table")
+
+    def test_amount_min_filter(self, qtbot, temp_db, sample_card, sample_transactions):
+        """Set amount_min_filter to '0', only positive amounts visible"""
+        view = self._make_view_with_data(qtbot, temp_db, sample_card, sample_transactions)
+        view.amount_min_filter.setText("0")
+        view._apply_filters()
+
+        for row in range(view.table.rowCount()):
+            if not view.table.isRowHidden(row):
+                amount_item = view.table.item(row, 4)
+                if amount_item:
+                    amount_text = amount_item.text().replace('$', '').replace(',', '').strip()
+                    try:
+                        amount = float(amount_text)
+                        assert amount >= 0, f"Row {row} has amount {amount} but should be >= 0"
+                    except ValueError:
+                        pass
+
+    def test_amount_max_filter(self, qtbot, temp_db, sample_card, sample_transactions):
+        """Set amount_max_filter to '0', only negative amounts visible"""
+        view = self._make_view_with_data(qtbot, temp_db, sample_card, sample_transactions)
+        view.amount_max_filter.setText("0")
+        view._apply_filters()
+
+        for row in range(view.table.rowCount()):
+            if not view.table.isRowHidden(row):
+                amount_item = view.table.item(row, 4)
+                if amount_item:
+                    amount_text = amount_item.text().replace('$', '').replace(',', '').strip()
+                    try:
+                        amount = float(amount_text)
+                        assert amount <= 0, f"Row {row} has amount {amount} but should be <= 0"
+                    except ValueError:
+                        pass
+
+    def test_sign_filter_income(self, qtbot, temp_db, sample_card, sample_transactions):
+        """Set amount_sign_filter to index 1 (Income+), only positive amounts visible"""
+        view = self._make_view_with_data(qtbot, temp_db, sample_card, sample_transactions)
+        view.amount_sign_filter.setCurrentIndex(1)
+        view._apply_filters()
+
+        for row in range(view.table.rowCount()):
+            if not view.table.isRowHidden(row):
+                amount_item = view.table.item(row, 4)
+                if amount_item:
+                    amount_text = amount_item.text().replace('$', '').replace(',', '').strip()
+                    try:
+                        amount = float(amount_text)
+                        assert amount > 0, f"Row {row} has amount {amount} but should be > 0"
+                    except ValueError:
+                        pass
+
+    def test_sign_filter_expenses(self, qtbot, temp_db, sample_card, sample_transactions):
+        """Set amount_sign_filter to index 2 (Expenses-), only negative amounts visible"""
+        view = self._make_view_with_data(qtbot, temp_db, sample_card, sample_transactions)
+        view.amount_sign_filter.setCurrentIndex(2)
+        view._apply_filters()
+
+        for row in range(view.table.rowCount()):
+            if not view.table.isRowHidden(row):
+                amount_item = view.table.item(row, 4)
+                if amount_item:
+                    amount_text = amount_item.text().replace('$', '').replace(',', '').strip()
+                    try:
+                        amount = float(amount_text)
+                        assert amount < 0, f"Row {row} has amount {amount} but should be < 0"
+                    except ValueError:
+                        pass
+
+    def test_clear_filters_shows_all(self, qtbot, temp_db, sample_card, sample_transactions):
+        """Apply filters, then _clear_filters(), all rows visible"""
+        view = self._make_view_with_data(qtbot, temp_db, sample_card, sample_transactions)
+        # Apply a restrictive filter first
+        view.desc_filter.setText("Paycheck")
+        view._apply_filters()
+        # Verify some rows are hidden
+        hidden_count = sum(1 for row in range(view.table.rowCount()) if view.table.isRowHidden(row))
+        assert hidden_count > 0, "At least one row should be hidden after filtering"
+
+        # Clear filters
+        view._clear_filters()
+        for row in range(view.table.rowCount()):
+            assert not view.table.isRowHidden(row), f"Row {row} should be visible after clearing filters"
+
+    def test_invalid_amount_filter_ignored(self, qtbot, temp_db, sample_card, sample_transactions):
+        """Set amount_min_filter to 'abc', no crash, all rows visible"""
+        view = self._make_view_with_data(qtbot, temp_db, sample_card, sample_transactions)
+        view.amount_min_filter.setText("abc")
+        view._apply_filters()
+        # All rows should remain visible since the invalid filter is ignored
+        for row in range(view.table.rowCount()):
+            assert not view.table.isRowHidden(row), f"Row {row} should be visible with invalid filter"
+
+
+class TestCountPaydaysInMonth:
+    """Tests for _count_paydays_in_month(year, month)"""
+
+    def _make_view(self, qtbot, temp_db):
+        """Helper to create a TransactionsView instance"""
+        from budget_app.views.transactions_view import TransactionsView
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        return view
+
+    def test_january_2026_has_3_paydays(self, qtbot, temp_db):
+        """January 2026 has 5 Fridays (2,9,16,23,30) -> returns 3"""
+        view = self._make_view(qtbot, temp_db)
+        assert view._count_paydays_in_month(2026, 1) == 3
+
+    def test_february_2026_has_2_paydays(self, qtbot, temp_db):
+        """February 2026 has 4 Fridays -> returns 2"""
+        view = self._make_view(qtbot, temp_db)
+        assert view._count_paydays_in_month(2026, 2) == 2
+
+    def test_may_2026_has_3_paydays(self, qtbot, temp_db):
+        """May 2026 has 5 Fridays (1,8,15,22,29) -> returns 3"""
+        view = self._make_view(qtbot, temp_db)
+        assert view._count_paydays_in_month(2026, 5) == 3
+
+
+class TestPayTypeFilter:
+    """Tests for pay type filter behavior"""
+
+    def _make_view(self, qtbot, temp_db):
+        """Helper to create a TransactionsView instance"""
+        from budget_app.views.transactions_view import TransactionsView
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        return view
+
+    def test_select_all_pay_types_text(self, qtbot, temp_db):
+        """After _select_all_pay_types(), button text is 'All triangle-down'"""
+        view = self._make_view(qtbot, temp_db)
+        view._select_all_pay_types()
+        assert view.pay_type_btn.text() == "All \u25bc"
+
+    def test_select_no_pay_types_text(self, qtbot, temp_db):
+        """After _select_no_pay_types(), button text is 'None triangle-down'"""
+        view = self._make_view(qtbot, temp_db)
+        view._select_no_pay_types()
+        assert view.pay_type_btn.text() == "None \u25bc"
+
+    def test_partial_pay_types_text(self, qtbot, temp_db, sample_card):
+        """Deselect one type, button shows 'N/M triangle-down' format"""
+        view = self._make_view(qtbot, temp_db)
+        # With sample_card, we have Chase (C) + Chase Freedom (CH) = 2 pay types
+        total = len(view._pay_type_actions)
+        assert total == 2, f"Expected 2 pay types, got {total}"
+        # Deselect one pay type (the first one)
+        first_code = list(view._pay_type_actions.keys())[0]
+        view._pay_type_actions[first_code].setChecked(False)
+        view._update_pay_type_filter()
+        expected = f"1/{total} \u25bc"
+        assert view.pay_type_btn.text() == expected

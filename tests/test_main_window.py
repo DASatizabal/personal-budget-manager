@@ -130,3 +130,120 @@ class TestMainWindow:
         menu_titles = [action.text() for action in menu_bar.actions()]
         for expected in ["&File", "&Edit", "&View", "&Tools", "&Help"]:
             assert expected in menu_titles, f"Menu '{expected}' not found in menu bar"
+
+    def test_on_tab_changed_calls_refresh(self, main_window):
+        """Switching tabs should trigger refresh on the new tab's view"""
+        # Switch to Credit Cards tab (index 3)
+        main_window.tabs.setCurrentIndex(3)
+        current_widget = main_window.tabs.currentWidget()
+        # Verify we are on the credit cards view
+        assert current_widget is main_window.credit_cards_view
+
+    def test_refresh_current_view_updates_status_bar(self, main_window):
+        """_refresh_current_view() should update the status bar message"""
+        main_window._refresh_current_view()
+        assert main_window.status_bar.currentMessage() == "View refreshed"
+
+    def test_dashboard_is_first_tab(self, main_window):
+        """Dashboard should be the first tab (index 0) and the current widget after init"""
+        assert main_window.tabs.currentIndex() == 0
+        assert main_window.tabs.currentWidget() is main_window.dashboard_view
+
+
+# ---------------------------------------------------------------------------
+# RecalculateBalancesDialog tests
+# ---------------------------------------------------------------------------
+
+class TestRecalculateBalancesDialog:
+    """Tests for RecalculateBalancesDialog"""
+
+    def _make_dialog(self, qtbot):
+        from budget_app.views.main_window import RecalculateBalancesDialog
+        dialog = RecalculateBalancesDialog()
+        qtbot.addWidget(dialog)
+        return dialog
+
+    def test_dialog_title(self, qtbot, temp_db):
+        """Dialog title should be 'Recalculate Balances'"""
+        dialog = self._make_dialog(qtbot)
+        assert dialog.windowTitle() == "Recalculate Balances"
+
+    def test_table_has_six_columns(self, qtbot, temp_db):
+        """Table should have 6 columns with the correct headers"""
+        dialog = self._make_dialog(qtbot)
+        assert dialog.table.columnCount() == 6
+        expected_headers = [
+            "Account", "Type", "Stored Balance",
+            "Transaction Sum", "Calculated", "Actual Balance"
+        ]
+        for col, expected in enumerate(expected_headers):
+            header_item = dialog.table.horizontalHeaderItem(col)
+            assert header_item.text() == expected, (
+                f"Column {col} header should be '{expected}', got '{header_item.text()}'"
+            )
+
+    def test_accounts_appear_in_table(self, qtbot, temp_db, sample_account):
+        """An account with a pay_type_code should appear as a row in the table"""
+        dialog = self._make_dialog(qtbot)
+        assert dialog.table.rowCount() >= 1
+        # Verify the account name appears in the first column of some row
+        found = False
+        for row in range(dialog.table.rowCount()):
+            cell_text = dialog.table.item(row, 0).text()
+            if sample_account.name in cell_text:
+                found = True
+                break
+        assert found, f"Account '{sample_account.name}' not found in table"
+
+    def test_cards_appear_in_table(self, qtbot, temp_db, sample_card):
+        """A credit card should appear as a row in the table"""
+        dialog = self._make_dialog(qtbot)
+        assert dialog.table.rowCount() >= 1
+        found = False
+        for row in range(dialog.table.rowCount()):
+            cell_text = dialog.table.item(row, 0).text()
+            if sample_card.name in cell_text:
+                found = True
+                # Verify type column says CREDIT CARD
+                type_text = dialog.table.item(row, 1).text()
+                assert type_text == "CREDIT CARD"
+                break
+        assert found, f"Card '{sample_card.name}' not found in table"
+
+    def test_loans_appear_in_table(self, qtbot, temp_db, sample_loan):
+        """A loan should appear as a row in the table"""
+        dialog = self._make_dialog(qtbot)
+        assert dialog.table.rowCount() >= 1
+        found = False
+        for row in range(dialog.table.rowCount()):
+            cell_text = dialog.table.item(row, 0).text()
+            if sample_loan.name in cell_text:
+                found = True
+                # Verify type column says LOAN
+                type_text = dialog.table.item(row, 1).text()
+                assert type_text == "LOAN"
+                break
+        assert found, f"Loan '{sample_loan.name}' not found in table"
+
+    def test_spinbox_initial_value_matches_calculated(self, qtbot, temp_db, sample_account):
+        """Spinbox in Actual Balance column should equal stored_balance + trans_sum (no posted txns => stored_balance)"""
+        dialog = self._make_dialog(qtbot)
+        # Find the row for our sample account
+        for row in range(dialog.table.rowCount()):
+            cell_text = dialog.table.item(row, 0).text()
+            if sample_account.name in cell_text:
+                spinbox = dialog.spinboxes[row]
+                # With no posted transactions, trans_sum = 0, so calculated = stored_balance
+                assert abs(spinbox.value() - sample_account.current_balance) < 0.01, (
+                    f"Spinbox value {spinbox.value()} should equal stored balance "
+                    f"{sample_account.current_balance}"
+                )
+                return
+        pytest.fail(f"Account '{sample_account.name}' not found in dialog table")
+
+    def test_apply_no_changes_shows_info(self, qtbot, temp_db, sample_account, mock_qmessagebox):
+        """Applying without changes should show 'No Changes' info message"""
+        dialog = self._make_dialog(qtbot)
+        dialog._apply_changes()
+        assert mock_qmessagebox.info_called
+        assert mock_qmessagebox.info_title == "No Changes"

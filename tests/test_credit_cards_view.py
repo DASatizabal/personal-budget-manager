@@ -268,3 +268,72 @@ class TestCardDeletionDialog:
         dialog = CardDeletionDialog(None, sample_card, [], [])
         qtbot.addWidget(dialog)
         assert dialog.get_target_card_id() is None
+
+    def test_dialog_title_includes_card_name(self, qtbot, temp_db, sample_card):
+        from budget_app.views.credit_cards_view import CardDeletionDialog
+        dialog = CardDeletionDialog(None, sample_card, [], [])
+        qtbot.addWidget(dialog)
+        assert dialog.windowTitle() == f"Delete {sample_card.name}"
+
+    def test_charges_combo_appears_with_linked_charges(self, qtbot, temp_db, sample_card):
+        from budget_app.views.credit_cards_view import CardDeletionDialog
+        linked_charges = [{'name': 'Netflix', 'id': 1}]
+        dialog = CardDeletionDialog(None, sample_card, linked_charges, [])
+        qtbot.addWidget(dialog)
+        assert hasattr(dialog, 'charges_combo')
+
+    def test_charges_combo_has_unlink_option(self, qtbot, temp_db, sample_card):
+        from budget_app.views.credit_cards_view import CardDeletionDialog
+        linked_charges = [{'name': 'Netflix', 'id': 1}]
+        dialog = CardDeletionDialog(None, sample_card, linked_charges, [])
+        qtbot.addWidget(dialog)
+        assert dialog.charges_combo.itemData(0) is None
+
+    def test_charges_combo_excludes_deleted_card(self, qtbot, temp_db, multiple_cards):
+        from budget_app.views.credit_cards_view import CardDeletionDialog
+        linked_charges = [{'name': 'Netflix', 'id': 1}]
+        card_to_delete = multiple_cards[0]
+        dialog = CardDeletionDialog(None, card_to_delete, linked_charges, [])
+        qtbot.addWidget(dialog)
+        combo_card_ids = [
+            dialog.charges_combo.itemData(i)
+            for i in range(dialog.charges_combo.count())
+            if dialog.charges_combo.itemData(i) is not None
+        ]
+        assert card_to_delete.id not in combo_card_ids
+        for card in multiple_cards[1:]:
+            assert card.id in combo_card_ids
+
+    def test_transactions_section_with_transactions(self, qtbot, temp_db, sample_card):
+        from budget_app.views.credit_cards_view import CardDeletionDialog
+        transactions = [{'id': 1, 'date': '2026-01-01', 'description': 'Test', 'amount': -100}]
+        dialog = CardDeletionDialog(None, sample_card, [], transactions)
+        qtbot.addWidget(dialog)
+        assert hasattr(dialog, 'trans_delete_radio')
+        assert hasattr(dialog, 'trans_transfer_radio')
+
+    def test_trans_transfer_radio_default_checked(self, qtbot, temp_db, sample_card):
+        from budget_app.views.credit_cards_view import CardDeletionDialog
+        transactions = [{'id': 1, 'date': '2026-01-01', 'description': 'Test', 'amount': -100}]
+        dialog = CardDeletionDialog(None, sample_card, [], transactions)
+        qtbot.addWidget(dialog)
+        assert dialog.trans_transfer_radio.isChecked()
+
+    def test_get_delete_transactions_when_delete_checked(self, qtbot, temp_db, sample_card):
+        from budget_app.views.credit_cards_view import CardDeletionDialog
+        transactions = [{'id': 1, 'date': '2026-01-01', 'description': 'Test', 'amount': -100}]
+        dialog = CardDeletionDialog(None, sample_card, [], transactions)
+        qtbot.addWidget(dialog)
+        dialog.trans_delete_radio.setChecked(True)
+        assert dialog.get_delete_transactions() is True
+
+    def test_get_transaction_target_id_when_transfer(self, qtbot, temp_db, multiple_cards):
+        from budget_app.views.credit_cards_view import CardDeletionDialog
+        transactions = [{'id': 1, 'date': '2026-01-01', 'description': 'Test', 'amount': -100}]
+        card_to_delete = multiple_cards[0]
+        dialog = CardDeletionDialog(None, card_to_delete, [], transactions)
+        qtbot.addWidget(dialog)
+        dialog.trans_transfer_radio.setChecked(True)
+        target_id = dialog.get_transaction_target_id()
+        assert target_id is not None
+        assert target_id == dialog.trans_target_combo.currentData()
