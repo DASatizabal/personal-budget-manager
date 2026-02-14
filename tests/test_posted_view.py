@@ -188,3 +188,92 @@ class TestPostedTransactionsView:
         expected = ["Due Date", "Posted Date", "Pay Type", "Description", "Amount", "Notes"]
         for i, label in enumerate(expected):
             assert view.table.horizontalHeaderItem(i).text() == label
+
+
+class TestPostedTransactionsViewAdditional:
+    """Additional tests for PostedTransactionsView"""
+
+    def test_multiple_posted_transactions_display(self, qtbot, temp_db):
+        """Create 3 posted transactions, refresh, verify table has 3 rows"""
+        from budget_app.models.transaction import Transaction
+        from budget_app.views.posted_transactions_view import PostedTransactionsView
+
+        for i, (date, desc, amount) in enumerate([
+            ('2026-01-10', 'Rent Payment', -1200.0),
+            ('2026-01-15', 'Grocery Store', -85.50),
+            ('2026-01-20', 'Salary Deposit', 3000.0),
+        ]):
+            Transaction(
+                id=None, date=date, description=desc,
+                amount=amount, payment_method='C',
+                is_posted=True, posted_date=f'2026-01-{22 + i}'
+            ).save()
+
+        view = PostedTransactionsView()
+        qtbot.addWidget(view)
+        view.refresh()
+        assert view.table.rowCount() == 3
+
+    def test_pay_type_filter_hides_non_matching(self, qtbot, temp_db):
+        """Create posted transactions with different payment methods, filter by one type"""
+        from budget_app.models.transaction import Transaction
+        from budget_app.views.posted_transactions_view import PostedTransactionsView
+
+        Transaction(
+            id=None, date='2026-01-10', description='Bank Payment',
+            amount=-100.0, payment_method='C',
+            is_posted=True, posted_date='2026-01-12'
+        ).save()
+        Transaction(
+            id=None, date='2026-01-11', description='Card Payment',
+            amount=-50.0, payment_method='CH',
+            is_posted=True, posted_date='2026-01-13'
+        ).save()
+
+        view = PostedTransactionsView()
+        qtbot.addWidget(view)
+        view.refresh()
+        assert view.table.rowCount() == 2
+
+        # The pay_type_filter combo has "All" at index 0, "Chase (Bank)" with data "C" at index 1.
+        # Find the index with data == "C"
+        for i in range(view.pay_type_filter.count()):
+            if view.pay_type_filter.itemData(i) == "C":
+                view.pay_type_filter.setCurrentIndex(i)
+                break
+
+        # Count visible rows - only the 'C' transaction should be visible
+        visible_rows = [
+            r for r in range(view.table.rowCount())
+            if not view.table.isRowHidden(r)
+        ]
+        assert len(visible_rows) == 1
+        assert view.table.item(visible_rows[0], 2).text() == 'C'
+
+    def test_table_sorting_enabled(self, qtbot, temp_db):
+        """Verify table.isSortingEnabled() is False (sorting is not explicitly enabled)"""
+        from budget_app.views.posted_transactions_view import PostedTransactionsView
+
+        view = PostedTransactionsView()
+        qtbot.addWidget(view)
+        assert view.table.isSortingEnabled() is False
+
+    def test_notes_column_display(self, qtbot, temp_db):
+        """Create a posted transaction with notes, verify notes appear in the last column"""
+        from budget_app.models.transaction import Transaction
+        from budget_app.views.posted_transactions_view import PostedTransactionsView
+
+        Transaction(
+            id=None, date='2026-02-01', description='Test Item',
+            amount=-25.0, payment_method='C',
+            is_posted=True, posted_date='2026-02-03',
+            notes='Test note'
+        ).save()
+
+        view = PostedTransactionsView()
+        qtbot.addWidget(view)
+        view.refresh()
+        assert view.table.rowCount() == 1
+        # Notes is column index 5 (the last column)
+        notes_item = view.table.item(0, 5)
+        assert notes_item.text() == 'Test note'

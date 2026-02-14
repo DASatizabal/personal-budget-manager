@@ -358,6 +358,120 @@ class TestAccountModel:
         assert result is not None
         assert result.account_type == 'CHECKING'
 
+    def test_delete(self, temp_db):
+        """Deleting an account should remove it from the database"""
+        from budget_app.models.account import Account
+
+        account = Account(
+            id=None, name='Delete Me', account_type='CHECKING',
+            current_balance=1000.0, pay_type_code='DM'
+        )
+        account.save()
+        account_id = account.id
+
+        account.delete()
+
+        assert Account.get_by_id(account_id) is None
+
+    def test_delete_without_id_noop(self, temp_db):
+        """Deleting an account without an id should not crash"""
+        from budget_app.models.account import Account
+
+        account = Account(
+            id=None, name='Never Saved', account_type='CHECKING',
+            current_balance=0.0, pay_type_code='NS'
+        )
+        # Should not raise
+        account.delete()
+
+    def test_get_by_id_returns_none(self, temp_db):
+        """get_by_id should return None for nonexistent ID"""
+        from budget_app.models.account import Account
+
+        assert Account.get_by_id(99999) is None
+
+    def test_get_by_code(self, temp_db):
+        """get_by_code should return the account matching pay_type_code"""
+        from budget_app.models.account import Account
+
+        account = Account(
+            id=None, name='Code Account', account_type='CHECKING',
+            current_balance=2000.0, pay_type_code='C'
+        )
+        account.save()
+
+        retrieved = Account.get_by_code('C')
+        assert retrieved is not None
+        assert retrieved.name == 'Code Account'
+        assert retrieved.pay_type_code == 'C'
+
+    def test_get_by_code_returns_none(self, temp_db):
+        """get_by_code should return None for nonexistent code"""
+        from budget_app.models.account import Account
+
+        assert Account.get_by_code('NONEXISTENT') is None
+
+    def test_get_by_name(self, temp_db):
+        """get_by_name should return the account matching the name"""
+        from budget_app.models.account import Account
+
+        account = Account(
+            id=None, name='Chase', account_type='CHECKING',
+            current_balance=3000.0, pay_type_code='CH'
+        )
+        account.save()
+
+        retrieved = Account.get_by_name('Chase')
+        assert retrieved is not None
+        assert retrieved.name == 'Chase'
+        assert retrieved.current_balance == 3000.0
+
+    def test_get_by_name_returns_none(self, temp_db):
+        """get_by_name should return None for nonexistent name"""
+        from budget_app.models.account import Account
+
+        assert Account.get_by_name('NonExistent') is None
+
+    def test_get_total_balance(self, temp_db):
+        """get_total_balance should sum all account balances"""
+        from budget_app.models.account import Account
+
+        Account(
+            id=None, name='Checking', account_type='CHECKING',
+            current_balance=5000.0, pay_type_code='CK'
+        ).save()
+        Account(
+            id=None, name='Savings', account_type='SAVINGS',
+            current_balance=3000.0, pay_type_code='SV'
+        ).save()
+
+        assert Account.get_total_balance() == 8000.0
+
+    def test_get_total_balance_empty(self, temp_db):
+        """get_total_balance should return 0.0 with no accounts"""
+        from budget_app.models.account import Account
+
+        assert Account.get_total_balance() == 0.0
+
+    def test_save_update_path(self, temp_db):
+        """Saving an existing account should update it"""
+        from budget_app.models.account import Account
+
+        account = Account(
+            id=None, name='Original', account_type='CHECKING',
+            current_balance=1000.0, pay_type_code='OR'
+        )
+        account.save()
+        account_id = account.id
+
+        # Modify and save again (update path)
+        account.current_balance = 2500.0
+        account.save()
+
+        retrieved = Account.get_by_id(account_id)
+        assert retrieved is not None
+        assert retrieved.current_balance == 2500.0
+
 
 class TestTransactionModel:
     """Tests for Transaction model"""
@@ -395,6 +509,228 @@ class TestTransactionModel:
         assert retrieved is not None
         assert retrieved.description == 'Test Transaction'
         assert retrieved.amount == -150.0
+
+    def test_save_update_path(self, temp_db):
+        """Saving an existing transaction should update it"""
+        from budget_app.models.transaction import Transaction
+
+        trans = Transaction(
+            id=None,
+            date='2025-07-01',
+            description='Original Description',
+            amount=-50.0,
+            payment_method='C'
+        )
+        trans.save()
+        trans_id = trans.id
+
+        # Modify and save again (update path)
+        trans.description = 'Updated Description'
+        trans.save()
+
+        retrieved = Transaction.get_by_id(trans_id)
+        assert retrieved is not None
+        assert retrieved.description == 'Updated Description'
+
+    def test_delete(self, temp_db):
+        """Deleting a transaction should remove it from the database"""
+        from budget_app.models.transaction import Transaction
+
+        trans = Transaction(
+            id=None,
+            date='2025-07-01',
+            description='Delete Me',
+            amount=-25.0,
+            payment_method='C'
+        )
+        trans.save()
+        trans_id = trans.id
+
+        trans.delete()
+
+        assert Transaction.get_by_id(trans_id) is None
+
+    def test_delete_without_id_noop(self, temp_db):
+        """Deleting a transaction without an id should not crash"""
+        from budget_app.models.transaction import Transaction
+
+        trans = Transaction(
+            id=None,
+            date='2025-07-01',
+            description='Never Saved',
+            amount=-10.0,
+            payment_method='C'
+        )
+        # Should not raise
+        trans.delete()
+
+    def test_get_by_id_returns_none(self, temp_db):
+        """get_by_id should return None for nonexistent ID"""
+        from budget_app.models.transaction import Transaction
+
+        assert Transaction.get_by_id(99999) is None
+
+    def test_get_all(self, temp_db):
+        """get_all should return all transactions sorted by date"""
+        from budget_app.models.transaction import Transaction
+
+        Transaction(
+            id=None, date='2025-07-03', description='Third',
+            amount=-30.0, payment_method='C'
+        ).save()
+        Transaction(
+            id=None, date='2025-07-01', description='First',
+            amount=-10.0, payment_method='C'
+        ).save()
+        Transaction(
+            id=None, date='2025-07-02', description='Second',
+            amount=-20.0, payment_method='C'
+        ).save()
+
+        all_trans = Transaction.get_all()
+        assert len(all_trans) == 3
+        assert all_trans[0].description == 'First'
+        assert all_trans[1].description == 'Second'
+        assert all_trans[2].description == 'Third'
+
+    def test_get_all_with_limit(self, temp_db):
+        """get_all with limit should return only that many transactions"""
+        from budget_app.models.transaction import Transaction
+
+        Transaction(
+            id=None, date='2025-07-01', description='One',
+            amount=-10.0, payment_method='C'
+        ).save()
+        Transaction(
+            id=None, date='2025-07-02', description='Two',
+            amount=-20.0, payment_method='C'
+        ).save()
+        Transaction(
+            id=None, date='2025-07-03', description='Three',
+            amount=-30.0, payment_method='C'
+        ).save()
+
+        limited = Transaction.get_all(limit=2)
+        assert len(limited) == 2
+
+    def test_get_by_payment_method(self, temp_db):
+        """get_by_payment_method should filter by payment method"""
+        from budget_app.models.transaction import Transaction
+
+        Transaction(
+            id=None, date='2025-07-01', description='Checking',
+            amount=-10.0, payment_method='C'
+        ).save()
+        Transaction(
+            id=None, date='2025-07-02', description='Credit',
+            amount=-20.0, payment_method='CH'
+        ).save()
+        Transaction(
+            id=None, date='2025-07-03', description='Checking Again',
+            amount=-30.0, payment_method='C'
+        ).save()
+
+        checking_trans = Transaction.get_by_payment_method('C')
+        assert len(checking_trans) == 2
+        for t in checking_trans:
+            assert t.payment_method == 'C'
+
+    def test_get_future_transactions_with_none_date(self, temp_db):
+        """get_future_transactions with no from_date should use today and find future transactions"""
+        from budget_app.models.transaction import Transaction
+
+        # Create a transaction far in the future
+        Transaction(
+            id=None, date='2099-01-01', description='Future',
+            amount=-100.0, payment_method='C'
+        ).save()
+        # Create a transaction in the past
+        Transaction(
+            id=None, date='2020-01-01', description='Past',
+            amount=-50.0, payment_method='C'
+        ).save()
+
+        future = Transaction.get_future_transactions()
+        descriptions = [t.description for t in future]
+        assert 'Future' in descriptions
+        assert 'Past' not in descriptions
+
+    def test_delete_future_recurring(self, temp_db):
+        """delete_future_recurring should delete future non-posted transactions"""
+        from budget_app.models.transaction import Transaction
+
+        # Future non-posted (should be deleted)
+        Transaction(
+            id=None, date='2099-06-01', description='Future Non-Posted',
+            amount=-50.0, payment_method='C', is_posted=False
+        ).save()
+        # Future posted (should remain)
+        Transaction(
+            id=None, date='2099-06-15', description='Future Posted',
+            amount=-75.0, payment_method='C', is_posted=True,
+            posted_date='2099-06-10'
+        ).save()
+        # Past non-posted (should remain)
+        Transaction(
+            id=None, date='2020-01-01', description='Past Non-Posted',
+            amount=-25.0, payment_method='C', is_posted=False
+        ).save()
+
+        Transaction.delete_future_recurring(from_date='2099-01-01')
+
+        all_trans = Transaction.get_all()
+        descriptions = [t.description for t in all_trans]
+        assert 'Future Non-Posted' not in descriptions
+        assert 'Future Posted' in descriptions
+        assert 'Past Non-Posted' in descriptions
+
+    def test_get_running_balance(self, temp_db):
+        """get_running_balance should sum transaction amounts and add to starting balance"""
+        from budget_app.models.transaction import Transaction
+
+        Transaction(
+            id=None, date='2026-01-01', description='Paycheck',
+            amount=2500.0, payment_method='C'
+        ).save()
+        Transaction(
+            id=None, date='2026-01-10', description='Rent',
+            amount=-1200.0, payment_method='C'
+        ).save()
+        Transaction(
+            id=None, date='2026-01-15', description='Groceries',
+            amount=-300.0, payment_method='C'
+        ).save()
+
+        # starting_balance=5000, sum of amounts = 2500 - 1200 - 300 = 1000
+        # running balance = 5000 + 1000 = 6000
+        balance = Transaction.get_running_balance('C', '2026-12-31', 5000.0)
+        assert balance == 6000.0
+
+    def test_clear_posted(self, temp_db):
+        """clear_posted should delete posted transactions and return count"""
+        from budget_app.models.transaction import Transaction
+
+        Transaction(
+            id=None, date='2026-01-01', description='Posted 1',
+            amount=-100.0, payment_method='C', is_posted=True,
+            posted_date='2026-01-05'
+        ).save()
+        Transaction(
+            id=None, date='2026-01-10', description='Posted 2',
+            amount=-200.0, payment_method='C', is_posted=True,
+            posted_date='2026-01-12'
+        ).save()
+        Transaction(
+            id=None, date='2026-01-15', description='Not Posted',
+            amount=-50.0, payment_method='C', is_posted=False
+        ).save()
+
+        count = Transaction.clear_posted()
+        assert count == 2
+
+        remaining = Transaction.get_all()
+        assert len(remaining) == 1
+        assert remaining[0].description == 'Not Posted'
 
 
 class TestRecurringChargeModel:
@@ -434,6 +770,64 @@ class TestRecurringChargeModel:
         assert retrieved is not None
         assert retrieved.name == 'Test Charge'
         assert retrieved.amount == 50.0
+
+    def test_get_by_name(self, temp_db):
+        """get_by_name should return the charge matching the given name"""
+        from budget_app.models.recurring_charge import RecurringCharge
+
+        charge = RecurringCharge(
+            id=None,
+            name='Netflix',
+            amount=15.99,
+            day_of_month=15,
+            payment_method='CH',
+            amount_type='FIXED'
+        )
+        charge.save()
+
+        retrieved = RecurringCharge.get_by_name('Netflix')
+        assert retrieved is not None
+        assert retrieved.id == charge.id
+        assert retrieved.name == 'Netflix'
+        assert retrieved.amount == 15.99
+
+    def test_get_by_name_returns_none(self, temp_db):
+        """get_by_name should return None for a nonexistent name"""
+        from budget_app.models.recurring_charge import RecurringCharge
+
+        assert RecurringCharge.get_by_name('NonExistent') is None
+
+    def test_save_update_path(self, temp_db):
+        """Saving an existing charge should update it rather than insert"""
+        from budget_app.models.recurring_charge import RecurringCharge
+
+        charge = RecurringCharge(
+            id=None,
+            name='Spotify',
+            amount=9.99,
+            day_of_month=1,
+            payment_method='C'
+        )
+        charge.save()
+        original_id = charge.id
+
+        # Modify and save again (update path)
+        charge.amount = 12.99
+        charge.save()
+
+        # ID should not change
+        assert charge.id == original_id
+
+        # Retrieve and verify updated value
+        retrieved = RecurringCharge.get_by_id(original_id)
+        assert retrieved is not None
+        assert retrieved.amount == 12.99
+
+    def test_get_by_id_returns_none(self, temp_db):
+        """get_by_id should return None for a nonexistent ID"""
+        from budget_app.models.recurring_charge import RecurringCharge
+
+        assert RecurringCharge.get_by_id(99999) is None
 
 
 class TestPaycheckConfigModel:
@@ -504,6 +898,104 @@ class TestPaycheckConfigModel:
 
         # Net = 4000 - (4000 * 0.10) = 4000 - 400 = 3600
         assert config.net_pay == 3600.0
+
+    def test_deduction_save_update_path(self, temp_db):
+        """Saving an existing deduction should update it rather than insert"""
+        from budget_app.models.paycheck import PaycheckConfig, PaycheckDeduction
+
+        config = PaycheckConfig(
+            id=None, gross_amount=5000.0, pay_frequency='BIWEEKLY',
+            effective_date='2025-01-01', is_current=True
+        )
+        config.save()
+
+        deduction = PaycheckDeduction(
+            id=None, paycheck_config_id=config.id,
+            name='Tax', amount_type='FIXED', amount=500.0
+        )
+        deduction.save()
+        original_id = deduction.id
+
+        # Modify name and save again (update path)
+        deduction.name = 'Federal Tax'
+        deduction.save()
+
+        # ID should not change
+        assert deduction.id == original_id
+
+        # Retrieve config and verify updated deduction name
+        config = PaycheckConfig.get_by_id(config.id)
+        matching = [d for d in config.deductions if d.id == original_id]
+        assert len(matching) == 1
+        assert matching[0].name == 'Federal Tax'
+
+    def test_deduction_delete(self, temp_db):
+        """Deleting a deduction should remove it from the database"""
+        from budget_app.models.paycheck import PaycheckConfig, PaycheckDeduction
+
+        config = PaycheckConfig(
+            id=None, gross_amount=5000.0, pay_frequency='BIWEEKLY',
+            effective_date='2025-01-01', is_current=True
+        )
+        config.save()
+
+        deduction = PaycheckDeduction(
+            id=None, paycheck_config_id=config.id,
+            name='Tax', amount_type='FIXED', amount=500.0
+        )
+        deduction.save()
+        deduction_id = deduction.id
+
+        deduction.delete()
+
+        # Reload config and verify deduction is gone
+        config = PaycheckConfig.get_by_id(config.id)
+        matching = [d for d in config.deductions if d.id == deduction_id]
+        assert len(matching) == 0
+
+    def test_config_save_update_path(self, temp_db):
+        """Saving an existing config should update it rather than insert"""
+        from budget_app.models.paycheck import PaycheckConfig
+
+        config = PaycheckConfig(
+            id=None, gross_amount=5000.0, pay_frequency='BIWEEKLY',
+            effective_date='2025-01-01', is_current=True
+        )
+        config.save()
+        original_id = config.id
+
+        # Modify gross_amount and save again (update path)
+        config.gross_amount = 6000.0
+        config.save()
+
+        # ID should not change
+        assert config.id == original_id
+
+        # Retrieve and verify updated value
+        retrieved = PaycheckConfig.get_by_id(original_id)
+        assert retrieved is not None
+        assert retrieved.gross_amount == 6000.0
+
+    def test_config_delete(self, temp_db):
+        """Deleting a config should remove it from the database"""
+        from budget_app.models.paycheck import PaycheckConfig
+
+        config = PaycheckConfig(
+            id=None, gross_amount=5000.0, pay_frequency='BIWEEKLY',
+            effective_date='2025-01-01', is_current=True
+        )
+        config.save()
+        config_id = config.id
+
+        config.delete()
+
+        assert PaycheckConfig.get_by_id(config_id) is None
+
+    def test_config_get_by_id_returns_none(self, temp_db):
+        """get_by_id should return None for a nonexistent config ID"""
+        from budget_app.models.paycheck import PaycheckConfig
+
+        assert PaycheckConfig.get_by_id(99999) is None
 
 
 if __name__ == '__main__':

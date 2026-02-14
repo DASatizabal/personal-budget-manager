@@ -300,3 +300,25 @@ class TestDeferredPurchaseDialog:
         dialog._validate_and_accept()
         assert mock_qmessagebox.warning_called
         assert "Standard APR" in mock_qmessagebox.warning_text
+
+
+class TestDeferredInterestViewActions:
+    def test_edit_no_selection_warns(self, qtbot, temp_db, mock_qmessagebox):
+        from budget_app.views.deferred_interest_view import DeferredInterestView
+        view = DeferredInterestView()
+        qtbot.addWidget(view)
+        view._edit_purchase()
+        assert mock_qmessagebox.warning_called
+
+    def test_delete_no_selection_warns(self, qtbot, temp_db, mock_qmessagebox):
+        from budget_app.views.deferred_interest_view import DeferredInterestView
+        view = DeferredInterestView()
+        qtbot.addWidget(view)
+        view._delete_purchase()
+        assert mock_qmessagebox.warning_called
+
+    def test_table_populates_with_purchase(self, qtbot, temp_db, sample_deferred_purchase):
+        from budget_app.views.deferred_interest_view import DeferredInterestView
+        view = DeferredInterestView()
+        qtbot.addWidget(view)
+        assert view.table.rowCount() >= 1

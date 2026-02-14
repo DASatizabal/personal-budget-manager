@@ -708,3 +708,495 @@ class TestPayTypeFilter:
         view._update_pay_type_filter()
         expected = f"1/{total} \u25bc"
         assert view.pay_type_btn.text() == expected
+
+
+class TestToggleZeroOwedColumns:
+    """Tests for _toggle_zero_owed_columns"""
+
+    def test_hides_zero_balance_card_columns(self, qtbot, temp_db, multiple_cards):
+        """CI (Citi) has balance=0, its Owed column should be hidden after toggle"""
+        from budget_app.views.transactions_view import TransactionsView
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        # Ensure all columns start visible
+        view._show_all_columns()
+        # Hide zero-owed columns
+        view._toggle_zero_owed_columns(False)
+        # Find the Citi Owed column index and verify it is hidden
+        citi_owed_idx = view._all_columns.index("Citi Owed")
+        assert view.table.isColumnHidden(citi_owed_idx) is True
+
+    def test_shows_zero_balance_card_columns(self, qtbot, temp_db, multiple_cards):
+        """After showing zero-owed columns, CI Owed column should be visible"""
+        from budget_app.views.transactions_view import TransactionsView
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        # First hide them
+        view._toggle_zero_owed_columns(False)
+        citi_owed_idx = view._all_columns.index("Citi Owed")
+        assert view.table.isColumnHidden(citi_owed_idx) is True
+        # Now show them
+        view._toggle_zero_owed_columns(True)
+        assert view.table.isColumnHidden(citi_owed_idx) is False
+
+    def test_nonzero_balance_columns_unchanged(self, qtbot, temp_db, multiple_cards):
+        """Columns for cards with balance > 0 should not be hidden"""
+        from budget_app.views.transactions_view import TransactionsView
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        view._show_all_columns()
+        view._toggle_zero_owed_columns(False)
+        # Chase Freedom (balance=3000), Amex Blue (4500), Discover (3200) should remain visible
+        for card_name in ["Chase Freedom", "Amex Blue", "Discover"]:
+            owed_col = f"{card_name} Owed"
+            idx = view._all_columns.index(owed_col)
+            assert view.table.isColumnHidden(idx) is False, f"{owed_col} should remain visible"
+
+
+class TestSaveColumnVisibility:
+    """Tests for _save_column_visibility"""
+
+    def test_saves_hidden_columns_to_settings(self, qtbot, temp_db, sample_card):
+        """Hide a column, call _save_column_visibility, verify QSettings"""
+        from budget_app.views.transactions_view import TransactionsView
+        from PyQt6.QtCore import QSettings
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        # Hide the Chase Freedom Owed column
+        owed_idx = view._all_columns.index("Chase Freedom Owed")
+        view.table.setColumnHidden(owed_idx, True)
+        view._save_column_visibility()
+        # Read back from QSettings
+        settings = QSettings("BudgetApp", "PersonalBudgetManager")
+        hidden = settings.value("transactions/hidden_columns", [])
+        assert "Chase Freedom Owed" in hidden
+
+    def test_visible_columns_not_in_settings(self, qtbot, temp_db, sample_card):
+        """Visible columns should not appear in the hidden list"""
+        from budget_app.views.transactions_view import TransactionsView
+        from PyQt6.QtCore import QSettings
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        # Show all columns
+        view._show_all_columns()
+        view._save_column_visibility()
+        settings = QSettings("BudgetApp", "PersonalBudgetManager")
+        hidden = settings.value("transactions/hidden_columns", [])
+        if hidden is None:
+            hidden = []
+        assert "Chase Freedom Owed" not in hidden
+        assert "Chase Freedom Avail" not in hidden
+
+
+class TestUpdateBalancesForPostedTransaction:
+    """Tests for _update_balances_for_posted_transaction"""
+
+    def test_posting_chase_transaction_updates_account(self, qtbot, temp_db, sample_account):
+        """Posting a Chase transaction with amount=-100 decreases account balance by 100"""
+        from budget_app.views.transactions_view import TransactionsView
+        from budget_app.models.transaction import Transaction
+        from budget_app.models.account import Account
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        trans = Transaction(
+            id=None, date='2026-02-01', description='Test Expense',
+            amount=-100.0, payment_method='C', is_posted=False
+        )
+        trans.save()
+        view._update_balances_for_posted_transaction(trans)
+        account = Account.get_by_code('C')
+        assert account.current_balance == 4900.0  # 5000 - 100
+
+    def test_posting_positive_chase_transaction(self, qtbot, temp_db, sample_account):
+        """Posting a positive Chase transaction (income) increases account balance"""
+        from budget_app.views.transactions_view import TransactionsView
+        from budget_app.models.transaction import Transaction
+        from budget_app.models.account import Account
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        trans = Transaction(
+            id=None, date='2026-02-01', description='Paycheck',
+            amount=2500.0, payment_method='C', is_posted=False
+        )
+        trans.save()
+        view._update_balances_for_posted_transaction(trans)
+        account = Account.get_by_code('C')
+        assert account.current_balance == 7500.0  # 5000 + 2500
+
+    def test_posting_card_transaction_updates_card(self, qtbot, temp_db, sample_card):
+        """Posting a credit card transaction updates the card balance"""
+        from budget_app.views.transactions_view import TransactionsView
+        from budget_app.models.transaction import Transaction
+        from budget_app.models.credit_card import CreditCard
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        trans = Transaction(
+            id=None, date='2026-02-05', description='Card Purchase',
+            amount=-50.0, payment_method='CH', is_posted=False
+        )
+        trans.save()
+        view._update_balances_for_posted_transaction(trans)
+        card = CreditCard.get_by_code('CH')
+        assert card.current_balance == 2950.0  # 3000 + (-50)
+
+    def test_posting_cc_payment_updates_linked_card(self, qtbot, temp_db, sample_account, sample_card):
+        """Posting a CC payment from Chase also updates the linked card balance"""
+        from budget_app.views.transactions_view import TransactionsView
+        from budget_app.models.transaction import Transaction
+        from budget_app.models.account import Account
+        from budget_app.models.credit_card import CreditCard
+        from budget_app.models.recurring_charge import RecurringCharge
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        # Create a recurring charge linked to sample_card
+        charge = RecurringCharge(
+            id=None, name='Chase Freedom Payment', amount=-200.0,
+            day_of_month=15, payment_method='C',
+            frequency='MONTHLY', amount_type='FIXED',
+            linked_card_id=sample_card.id
+        )
+        charge.save()
+        # Create a transaction using this recurring charge from Chase
+        trans = Transaction(
+            id=None, date='2026-02-15', description='Chase Freedom Payment',
+            amount=-200.0, payment_method='C', is_posted=False,
+            recurring_charge_id=charge.id
+        )
+        trans.save()
+        view._update_balances_for_posted_transaction(trans)
+        # Account decreased: 5000 + (-200) = 4800
+        account = Account.get_by_code('C')
+        assert account.current_balance == 4800.0
+        # Linked card also decreased: 3000 + (-200) = 2800
+        card = CreditCard.get_by_code('CH')
+        assert card.current_balance == 2800.0
+
+
+class TestReverseBalancesForUnpostedTransaction:
+    """Tests for _reverse_balances_for_unposted_transaction"""
+
+    def test_reverse_chase_transaction(self, qtbot, temp_db, sample_account):
+        """Reversing a Chase transaction with amount=-100 adds 100 back to balance"""
+        from budget_app.views.transactions_view import TransactionsView
+        from budget_app.models.transaction import Transaction
+        from budget_app.models.account import Account
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        trans = Transaction(
+            id=None, date='2026-02-01', description='Test Expense',
+            amount=-100.0, payment_method='C', is_posted=True
+        )
+        trans.save()
+        # First simulate having posted it (balance is already at 4900)
+        account = Account.get_by_code('C')
+        account.current_balance = 4900.0
+        account.save()
+        # Now reverse
+        view._reverse_balances_for_unposted_transaction(trans)
+        account = Account.get_by_code('C')
+        assert account.current_balance == 5000.0  # 4900 - (-100) = 5000
+
+    def test_reverse_card_transaction(self, qtbot, temp_db, sample_card):
+        """Reversing a card transaction restores the card balance"""
+        from budget_app.views.transactions_view import TransactionsView
+        from budget_app.models.transaction import Transaction
+        from budget_app.models.credit_card import CreditCard
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        trans = Transaction(
+            id=None, date='2026-02-05', description='Card Purchase',
+            amount=-50.0, payment_method='CH', is_posted=True
+        )
+        trans.save()
+        # Simulate the card having been posted (balance went from 3000 to 2950)
+        card = CreditCard.get_by_code('CH')
+        card.current_balance = 2950.0
+        card.save()
+        # Reverse the posting
+        view._reverse_balances_for_unposted_transaction(trans)
+        card = CreditCard.get_by_code('CH')
+        assert card.current_balance == 3000.0  # 2950 - (-50) = 3000
+
+    def test_reverse_cc_payment_updates_linked_card(self, qtbot, temp_db, sample_account, sample_card):
+        """Reversing a CC payment restores both account and linked card balances"""
+        from budget_app.views.transactions_view import TransactionsView
+        from budget_app.models.transaction import Transaction
+        from budget_app.models.account import Account
+        from budget_app.models.credit_card import CreditCard
+        from budget_app.models.recurring_charge import RecurringCharge
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        # Create a recurring charge linked to sample_card
+        charge = RecurringCharge(
+            id=None, name='Chase Freedom Payment', amount=-200.0,
+            day_of_month=15, payment_method='C',
+            frequency='MONTHLY', amount_type='FIXED',
+            linked_card_id=sample_card.id
+        )
+        charge.save()
+        trans = Transaction(
+            id=None, date='2026-02-15', description='Chase Freedom Payment',
+            amount=-200.0, payment_method='C', is_posted=True,
+            recurring_charge_id=charge.id
+        )
+        trans.save()
+        # Simulate the posted state: account at 4800, card at 2800
+        account = Account.get_by_code('C')
+        account.current_balance = 4800.0
+        account.save()
+        card = CreditCard.get_by_code('CH')
+        card.current_balance = 2800.0
+        card.save()
+        # Reverse
+        view._reverse_balances_for_unposted_transaction(trans)
+        account = Account.get_by_code('C')
+        assert account.current_balance == 5000.0  # 4800 - (-200) = 5000
+        card = CreditCard.get_by_code('CH')
+        assert card.current_balance == 3000.0  # 2800 - (-200) = 3000
+
+
+class TestGetSelectedTransactionId:
+    """Tests for _get_selected_transaction_id"""
+
+    def test_returns_none_when_no_selection(self, qtbot, temp_db):
+        """Returns None when no row is selected in the table"""
+        from budget_app.views.transactions_view import TransactionsView
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        view.table.clearSelection()
+        assert view._get_selected_transaction_id() is None
+
+    def test_returns_id_when_row_selected(self, qtbot, temp_db, sample_account, sample_card, sample_transactions):
+        """Returns the transaction ID when a row is selected"""
+        from budget_app.views.transactions_view import TransactionsView
+        from PyQt6.QtCore import QDate
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        view._first_load = False
+        view.from_date.setDate(QDate.fromString("2026-01-01", "yyyy-MM-dd"))
+        view.to_date.setDate(QDate.fromString("2026-12-31", "yyyy-MM-dd"))
+        view.refresh()
+        # Ensure there are rows in the table
+        assert view.table.rowCount() > 0
+        # Select the first row
+        view.table.selectRow(0)
+        trans_id = view._get_selected_transaction_id()
+        assert trans_id is not None
+        assert isinstance(trans_id, int)
+
+
+class TestOnItemChanged:
+    """Tests for _on_item_changed - posting/unposting via checkbox"""
+
+    def _make_view(self, qtbot):
+        """Helper to create a TransactionsView with a wide date range"""
+        from budget_app.views.transactions_view import TransactionsView
+        from PyQt6.QtCore import QDate
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        view._first_load = False
+        view.from_date.setDate(QDate.fromString("2026-01-01", "yyyy-MM-dd"))
+        view.to_date.setDate(QDate.fromString("2026-12-31", "yyyy-MM-dd"))
+        return view
+
+    def test_non_checkbox_column_ignored(self, qtbot, temp_db, sample_account, sample_card, sample_transactions):
+        """Changing a non-checkbox column (column != 0) should do nothing"""
+        from budget_app.models.transaction import Transaction
+        view = self._make_view(qtbot)
+        view.refresh()
+        # Get a description item (column 3) and call _on_item_changed
+        item = view.table.item(0, 3)
+        assert item is not None
+        # Capture state before
+        trans_id = item.data(Qt.ItemDataRole.UserRole)
+        trans_before = Transaction.get_by_id(trans_id)
+        posted_before = trans_before.is_posted if trans_before else None
+        # Call _on_item_changed on a non-checkbox column - should be a no-op
+        view._on_item_changed(item)
+        # Verify nothing changed
+        if trans_before:
+            trans_after = Transaction.get_by_id(trans_id)
+            assert trans_after.is_posted == posted_before
+
+    def test_checkbox_no_trans_id_ignored(self, qtbot, temp_db):
+        """If checkbox item has no UserRole data, should be ignored"""
+        from budget_app.views.transactions_view import TransactionsView
+        from PyQt6.QtWidgets import QTableWidgetItem
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        # Manually add a row with no UserRole data on the checkbox item
+        view.table.setRowCount(1)
+        item = QTableWidgetItem()
+        item.setData(Qt.ItemDataRole.UserRole, None)
+        item.setCheckState(Qt.CheckState.Checked)
+        view.table.setItem(0, 0, item)
+        # Should not crash or raise any errors
+        view._on_item_changed(view.table.item(0, 0))
+
+    def test_posting_transaction_via_checkbox(self, qtbot, temp_db, sample_account, sample_card, sample_transactions):
+        """Checking the checkbox should mark transaction as posted and update balances"""
+        from budget_app.models.transaction import Transaction
+        view = self._make_view(qtbot)
+        view.refresh()
+        # Find an unposted transaction row and check its checkbox
+        for row in range(view.table.rowCount()):
+            checkbox = view.table.item(row, 0)
+            if checkbox and checkbox.checkState() == Qt.CheckState.Unchecked:
+                trans_id = checkbox.data(Qt.ItemDataRole.UserRole)
+                if trans_id:
+                    # Block signals so we can manually trigger
+                    view.table.blockSignals(True)
+                    checkbox.setCheckState(Qt.CheckState.Checked)
+                    view.table.blockSignals(False)
+                    view._on_item_changed(checkbox)
+                    # Verify the transaction is now posted
+                    trans = Transaction.get_by_id(trans_id)
+                    assert trans.is_posted is True
+                    assert trans.posted_date is not None
+                    break
+        else:
+            pytest.fail("No unposted transaction found in table")
+
+    def test_unposting_transaction_via_checkbox(self, qtbot, temp_db, sample_account, sample_card, sample_transactions):
+        """Unchecking the checkbox should unpost and reverse balances"""
+        from budget_app.models.transaction import Transaction
+        view = self._make_view(qtbot)
+        view.refresh()
+        # Find an unposted transaction, post it, then unpost it
+        for row in range(view.table.rowCount()):
+            checkbox = view.table.item(row, 0)
+            if checkbox and checkbox.checkState() == Qt.CheckState.Unchecked:
+                trans_id = checkbox.data(Qt.ItemDataRole.UserRole)
+                if trans_id:
+                    # Post it first
+                    view.table.blockSignals(True)
+                    checkbox.setCheckState(Qt.CheckState.Checked)
+                    view.table.blockSignals(False)
+                    view._on_item_changed(checkbox)
+                    trans = Transaction.get_by_id(trans_id)
+                    assert trans.is_posted is True
+                    # Now unpost it
+                    view.table.blockSignals(True)
+                    checkbox.setCheckState(Qt.CheckState.Unchecked)
+                    view.table.blockSignals(False)
+                    view._on_item_changed(checkbox)
+                    trans = Transaction.get_by_id(trans_id)
+                    assert trans.is_posted is False
+                    assert trans.posted_date is None
+                    break
+        else:
+            pytest.fail("No unposted transaction found in table")
+
+    def test_posting_already_posted_is_noop(self, qtbot, temp_db, sample_account, sample_card, sample_transactions):
+        """If transaction is already posted and checkbox is checked, no DB change occurs"""
+        from budget_app.models.transaction import Transaction
+        from budget_app.models.account import Account
+        view = self._make_view(qtbot)
+        view.refresh()
+        # Find an unposted transaction and post it via checkbox
+        for row in range(view.table.rowCount()):
+            checkbox = view.table.item(row, 0)
+            if checkbox and checkbox.checkState() == Qt.CheckState.Unchecked:
+                trans_id = checkbox.data(Qt.ItemDataRole.UserRole)
+                if trans_id:
+                    # Post it
+                    view.table.blockSignals(True)
+                    checkbox.setCheckState(Qt.CheckState.Checked)
+                    view.table.blockSignals(False)
+                    view._on_item_changed(checkbox)
+                    # Record the account balance after posting
+                    account = Account.get_by_code('C')
+                    balance_after_post = account.current_balance
+                    # Call _on_item_changed again with same Checked state
+                    # The transaction is already posted, so is_posted == is_posted, should be a no-op
+                    view._on_item_changed(checkbox)
+                    account = Account.get_by_code('C')
+                    assert account.current_balance == balance_after_post
+                    break
+        else:
+            pytest.fail("No unposted transaction found in table")
+
+
+class TestTransactionCrudNoSelection:
+    """Tests for add/edit/delete with no selection"""
+
+    def test_edit_no_selection_warns(self, qtbot, temp_db, mock_qmessagebox):
+        """Edit with no selection shows a warning"""
+        from budget_app.views.transactions_view import TransactionsView
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        view._edit_transaction()
+        assert mock_qmessagebox.warning_called
+
+    def test_delete_no_selection_warns(self, qtbot, temp_db, mock_qmessagebox):
+        """Delete with no selection shows a warning"""
+        from budget_app.views.transactions_view import TransactionsView
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        view._delete_transaction()
+        assert mock_qmessagebox.warning_called
+
+    def test_delete_all_empty_db_shows_info(self, qtbot, temp_db, mock_qmessagebox):
+        """Delete all with no transactions shows informational message"""
+        from budget_app.views.transactions_view import TransactionsView
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        view._delete_all_transactions()
+        assert mock_qmessagebox.info_called
+        assert "no transactions" in mock_qmessagebox.info_text.lower()
+
+    def test_clear_posted_no_posted_shows_info(self, qtbot, temp_db, mock_qmessagebox):
+        """Clear posted with no posted transactions shows informational message"""
+        from budget_app.views.transactions_view import TransactionsView
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        view._clear_posted_transactions()
+        assert mock_qmessagebox.info_called
+
+
+class TestNotifyBalanceChange:
+    """Tests for _notify_balance_change"""
+
+    def test_notify_no_parent(self, qtbot, temp_db):
+        """When there's no parent with dashboard_view, should not crash"""
+        from budget_app.views.transactions_view import TransactionsView
+        view = TransactionsView()
+        qtbot.addWidget(view)
+        # Call _notify_balance_change on a view with no parent hierarchy
+        view._notify_balance_change()  # Should not crash
+
+    def test_notify_with_dashboard_parent(self, qtbot, temp_db):
+        """When a parent has dashboard_view, it should call mark_dirty on it"""
+        from budget_app.views.transactions_view import TransactionsView
+        from PyQt6.QtWidgets import QWidget
+        from unittest.mock import MagicMock
+        # Create a fake parent widget with dashboard_view and posted_transactions_view
+        parent_widget = QWidget()
+        qtbot.addWidget(parent_widget)
+        parent_widget.dashboard_view = MagicMock()
+        parent_widget.posted_transactions_view = MagicMock()
+        # Create view and reparent it
+        view = TransactionsView()
+        view.setParent(parent_widget)
+        view._notify_balance_change()
+        parent_widget.dashboard_view.mark_dirty.assert_called_once()
+        parent_widget.posted_transactions_view.mark_dirty.assert_called_once()
+
+    def test_notify_walks_up_parent_chain(self, qtbot, temp_db):
+        """_notify_balance_change walks up the parent chain to find dashboard_view"""
+        from budget_app.views.transactions_view import TransactionsView
+        from PyQt6.QtWidgets import QWidget
+        from unittest.mock import MagicMock
+        # Create grandparent with the attributes
+        grandparent = QWidget()
+        qtbot.addWidget(grandparent)
+        grandparent.dashboard_view = MagicMock()
+        grandparent.posted_transactions_view = MagicMock()
+        # Create intermediate parent (no dashboard_view)
+        middle = QWidget(grandparent)
+        # Create view and reparent it to the middle widget
+        view = TransactionsView()
+        view.setParent(middle)
+        view._notify_balance_change()
+        grandparent.dashboard_view.mark_dirty.assert_called_once()
+        grandparent.posted_transactions_view.mark_dirty.assert_called_once()

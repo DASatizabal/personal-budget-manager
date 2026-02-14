@@ -341,3 +341,121 @@ class TestDeleteRecurringChargeDialog:
         qtbot.addWidget(dialog)
         dialog.delete_from_radio.setChecked(True)
         assert dialog.get_action() == "delete_from_date"
+
+
+class TestRecurringChargesViewAdditional:
+    """Additional tests for RecurringChargesView"""
+
+    def test_payment_method_column_display(self, qtbot, temp_db):
+        """Create a charge with payment_method='CH', verify the Payment Method column shows 'CH'"""
+        from budget_app.models.recurring_charge import RecurringCharge
+        from budget_app.views.recurring_charges_view import RecurringChargesView
+
+        # With no credit cards in the DB, 'CH' won't map to a card name,
+        # so it should display the raw code 'CH'
+        RecurringCharge(
+            id=None, name='Test Charge', amount=-20.0,
+            day_of_month=10, payment_method='CH',
+            frequency='MONTHLY', amount_type='FIXED'
+        ).save()
+
+        view = RecurringChargesView()
+        qtbot.addWidget(view)
+        # Payment Method is column index 3
+        assert view.table.rowCount() == 1
+        assert view.table.item(0, 3).text() == 'CH'
+
+    def test_linked_card_shows_card_name(self, qtbot, temp_db):
+        """Create a card, create a charge linked to it, verify the Payment Method column shows the card name"""
+        from budget_app.models.credit_card import CreditCard
+        from budget_app.models.recurring_charge import RecurringCharge
+        from budget_app.views.recurring_charges_view import RecurringChargesView
+
+        card = CreditCard(
+            id=None, pay_type_code='CH', name='Chase Freedom',
+            credit_limit=10000.0, current_balance=3000.0,
+            interest_rate=0.1899, due_day=15
+        )
+        card.save()
+        # card.save() auto-creates a recurring charge linked to this card.
+        # That auto-created charge uses payment_method='C' (payments from bank).
+        # The Payment Method column maps codes to names via the cards dict.
+        # 'C' maps to 'Chase (Bank)', and 'CH' maps to 'Chase Freedom'.
+
+        # Create an additional charge that uses 'CH' as payment_method (charged TO the card)
+        RecurringCharge(
+            id=None, name='Netflix on Card', amount=-15.99,
+            day_of_month=20, payment_method='CH',
+            frequency='MONTHLY', amount_type='FIXED'
+        ).save()
+
+        view = RecurringChargesView()
+        qtbot.addWidget(view)
+
+        # Find the row for 'Netflix on Card' - its Payment Method column should
+        # show the card name 'Chase Freedom' (resolved from code 'CH')
+        found = False
+        for row in range(view.table.rowCount()):
+            if view.table.item(row, 0).text() == 'Netflix on Card':
+                assert view.table.item(row, 3).text() == 'Chase Freedom'
+                found = True
+                break
+        assert found, "Could not find 'Netflix on Card' row in the table"
+
+    def test_show_inactive_checkbox_toggle(self, qtbot, temp_db):
+        """Create an inactive charge, verify it's not shown by default, check show_inactive, verify it appears"""
+        from budget_app.models.recurring_charge import RecurringCharge
+        from budget_app.views.recurring_charges_view import RecurringChargesView
+
+        RecurringCharge(
+            id=None, name='Old Subscription', amount=-9.99,
+            day_of_month=5, payment_method='C',
+            frequency='MONTHLY', amount_type='FIXED',
+            is_active=False
+        ).save()
+
+        view = RecurringChargesView()
+        qtbot.addWidget(view)
+        # By default show_inactive is unchecked, so inactive charge should not appear
+        assert view.table.rowCount() == 0
+
+        # Check the show_inactive checkbox (triggers refresh via stateChanged signal)
+        view.show_inactive.setChecked(True)
+
+        # Now the inactive charge should appear
+        assert view.table.rowCount() == 1
+        assert view.table.item(0, 0).text() == 'Old Subscription'
+        assert view.table.item(0, 6).text() == 'No'
+
+    def test_refresh_after_mark_dirty(self, qtbot, temp_db):
+        """mark_dirty(), then refresh(), verify data reloads"""
+        from budget_app.models.recurring_charge import RecurringCharge
+        from budget_app.views.recurring_charges_view import RecurringChargesView
+
+        RecurringCharge(
+            id=None, name='Initial Charge', amount=-30.0,
+            day_of_month=10, payment_method='C',
+            frequency='MONTHLY', amount_type='FIXED'
+        ).save()
+
+        view = RecurringChargesView()
+        qtbot.addWidget(view)
+        assert view.table.rowCount() == 1
+
+        # Add another charge directly to the DB after the view was created
+        RecurringCharge(
+            id=None, name='New Charge', amount=-20.0,
+            day_of_month=15, payment_method='C',
+            frequency='MONTHLY', amount_type='FIXED'
+        ).save()
+
+        # Without mark_dirty, refresh is a no-op (data not dirty)
+        view.refresh()
+        assert view.table.rowCount() == 1  # Still 1 because refresh was skipped
+
+        # Now mark dirty and refresh - should reload and show both charges
+        view.mark_dirty()
+        view.refresh()
+        assert view.table.rowCount() == 2
+
+

@@ -158,6 +158,115 @@ class TestDashboardView:
         btn = container.layout().itemAt(2).widget()
         assert "#4caf50" in btn.styleSheet()
 
+    def test_account_balance_low_no_color(self, qtbot, temp_db):
+        """Balance between 0 and 1000 gets no color, just text-align: right"""
+        from budget_app.models.account import Account
+        from budget_app.views.dashboard_view import DashboardView
+        Account(id=None, name='Low Balance', account_type='CHECKING',
+                current_balance=500.0, pay_type_code='LB').save()
+        view = DashboardView()
+        qtbot.addWidget(view)
+        container = view.accounts_layout.itemAt(0).widget()
+        btn = container.layout().itemAt(2).widget()
+        assert "text-align: right" in btn.styleSheet()
+        assert "#f44336" not in btn.styleSheet()
+        assert "#4caf50" not in btn.styleSheet()
+
+    def test_account_balance_zero_no_color(self, qtbot, temp_db):
+        """Balance of exactly 0 gets no color, just text-align: right"""
+        from budget_app.models.account import Account
+        from budget_app.views.dashboard_view import DashboardView
+        Account(id=None, name='Zero Balance', account_type='SAVINGS',
+                current_balance=0.0, pay_type_code='ZB').save()
+        view = DashboardView()
+        qtbot.addWidget(view)
+        container = view.accounts_layout.itemAt(0).widget()
+        btn = container.layout().itemAt(2).widget()
+        assert "text-align: right" in btn.styleSheet()
+        assert "#f44336" not in btn.styleSheet()
+        assert "#4caf50" not in btn.styleSheet()
+
+    def test_refresh_twice_clears_and_rebuilds(self, qtbot, temp_db, sample_account, sample_card):
+        """Calling refresh twice should clear old widgets via deleteLater and rebuild"""
+        from budget_app.views.dashboard_view import DashboardView
+        view = DashboardView()
+        qtbot.addWidget(view)
+        # Constructor already called refresh() once with account data present.
+        # Count widgets before second refresh (excluding the stretch spacer).
+        initial_count = view.accounts_layout.count()
+        assert initial_count > 0
+        # Second refresh triggers the while-loop clearing branch (line 149)
+        view.refresh()
+        # Cards table should still have exactly 1 row, not duplicated
+        assert view.cards_table.rowCount() == 1
+        # Accounts layout should have the same count (rebuilt, not doubled)
+        assert view.accounts_layout.count() == initial_count
+
+    def test_utilization_bar_color_red_above_80(self, qtbot, temp_db):
+        """When overall utilization > 80%, progress bar should use red color"""
+        from budget_app.models.credit_card import CreditCard
+        from budget_app.views.dashboard_view import DashboardView
+        CreditCard(id=None, pay_type_code='HI', name='High Util',
+                   credit_limit=1000, current_balance=900,
+                   interest_rate=0.20, due_day=15).save()
+        view = DashboardView()
+        qtbot.addWidget(view)
+        # 900/1000 = 90% -> red
+        assert view.total_util_bar.value() == 90
+        assert "#f44336" in view.total_util_bar.styleSheet()
+
+    def test_utilization_bar_color_orange_above_50(self, qtbot, temp_db):
+        """When overall utilization > 50%, progress bar should use orange color"""
+        from budget_app.models.credit_card import CreditCard
+        from budget_app.views.dashboard_view import DashboardView
+        CreditCard(id=None, pay_type_code='MD', name='Med Util',
+                   credit_limit=1000, current_balance=600,
+                   interest_rate=0.20, due_day=15).save()
+        view = DashboardView()
+        qtbot.addWidget(view)
+        # 600/1000 = 60% -> orange
+        assert view.total_util_bar.value() == 60
+        assert "#ff9800" in view.total_util_bar.styleSheet()
+
+    def test_utilization_bar_color_yellow_above_30(self, qtbot, temp_db):
+        """When overall utilization > 30% and <= 50%, progress bar should use yellow color"""
+        from budget_app.models.credit_card import CreditCard
+        from budget_app.views.dashboard_view import DashboardView
+        CreditCard(id=None, pay_type_code='YL', name='Yellow Util',
+                   credit_limit=1000, current_balance=400,
+                   interest_rate=0.20, due_day=15).save()
+        view = DashboardView()
+        qtbot.addWidget(view)
+        # 400/1000 = 40% -> yellow
+        assert view.total_util_bar.value() == 40
+        assert "#ffeb3b" in view.total_util_bar.styleSheet()
+
+    def test_90_day_alert_stays_positive_label_text(self, qtbot, temp_db, sample_account):
+        """With checking account and no future transactions, date label shows stays positive"""
+        from budget_app.views.dashboard_view import DashboardView
+        view = DashboardView()
+        qtbot.addWidget(view)
+        assert "stays positive" in view.min_date_label.text()
+
+    def test_multiple_accounts_all_displayed(self, qtbot, temp_db):
+        """Multiple accounts should each get their own row in accounts layout"""
+        from budget_app.models.account import Account
+        from budget_app.views.dashboard_view import DashboardView
+        Account(id=None, name='Checking', account_type='CHECKING',
+                current_balance=5000.0, pay_type_code='C').save()
+        Account(id=None, name='Savings', account_type='SAVINGS',
+                current_balance=200.0, pay_type_code='S').save()
+        view = DashboardView()
+        qtbot.addWidget(view)
+        # Layout should have 2 account containers + 1 stretch = 3 items
+        # But we just check at least 2 widget containers exist
+        widget_count = 0
+        for i in range(view.accounts_layout.count()):
+            item = view.accounts_layout.itemAt(i)
+            if item.widget():
+                widget_count += 1
+        assert widget_count == 2
+
 
 class TestEditBalanceDialog:
     """Tests for EditBalanceDialog"""

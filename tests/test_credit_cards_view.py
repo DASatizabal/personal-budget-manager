@@ -337,3 +337,219 @@ class TestCardDeletionDialog:
         target_id = dialog.get_transaction_target_id()
         assert target_id is not None
         assert target_id == dialog.trans_target_combo.currentData()
+
+
+class TestCreditCardsViewDelete:
+    """Tests for _delete_card method"""
+
+    @staticmethod
+    def _unlink_auto_charges(card_id):
+        """Remove auto-created recurring charges so delete takes the simple path"""
+        from budget_app.models.database import Database
+        db = Database()
+        db.execute("DELETE FROM recurring_charges WHERE linked_card_id = ?", (card_id,))
+        db.commit()
+
+    def test_delete_no_linked_data_confirms_and_deletes(self, qtbot, temp_db, sample_card, mock_qmessagebox):
+        """With no linked charges or transactions, simple confirm-and-delete"""
+        from budget_app.views.credit_cards_view import CreditCardsView
+        from budget_app.models.credit_card import CreditCard
+        from PyQt6.QtWidgets import QMessageBox
+
+        # Remove the auto-created recurring charge so the simple delete path is taken
+        self._unlink_auto_charges(sample_card.id)
+
+        view = CreditCardsView()
+        qtbot.addWidget(view)
+        view.table.selectRow(0)
+        mock_qmessagebox.last_return = QMessageBox.StandardButton.Yes
+        view._delete_card()
+        assert mock_qmessagebox.question_called
+        # Card should be deleted
+        assert CreditCard.get_by_id(sample_card.id) is None
+
+    def test_delete_no_linked_data_user_cancels(self, qtbot, temp_db, sample_card, mock_qmessagebox):
+        """User cancels deletion, card should still exist"""
+        from budget_app.views.credit_cards_view import CreditCardsView
+        from budget_app.models.credit_card import CreditCard
+        from PyQt6.QtWidgets import QMessageBox
+
+        # Remove the auto-created recurring charge so the simple delete path is taken
+        self._unlink_auto_charges(sample_card.id)
+
+        view = CreditCardsView()
+        qtbot.addWidget(view)
+        view.table.selectRow(0)
+        mock_qmessagebox.last_return = QMessageBox.StandardButton.No
+        view._delete_card()
+        assert CreditCard.get_by_id(sample_card.id) is not None
+
+    def test_delete_card_not_found(self, qtbot, temp_db, sample_card, mock_qmessagebox):
+        """If card was deleted between selection and delete click, graceful handling"""
+        from budget_app.views.credit_cards_view import CreditCardsView
+
+        view = CreditCardsView()
+        qtbot.addWidget(view)
+        view.table.selectRow(0)
+        # Delete it first so get_by_id returns None
+        sample_card.delete()
+        view._delete_card()
+        # Should not crash - early return when card not found
+
+    def test_delete_with_linked_charges_shows_dialog(self, qtbot, temp_db, sample_card, mock_qmessagebox):
+        """Card with auto-created linked charges should show CardDeletionDialog"""
+        from budget_app.views.credit_cards_view import CreditCardsView
+
+        # sample_card auto-creates a linked recurring charge, so linked_charges is non-empty
+        view = CreditCardsView()
+        qtbot.addWidget(view)
+        view.table.selectRow(0)
+
+        from unittest.mock import patch
+        with patch('budget_app.views.credit_cards_view.CardDeletionDialog') as MockDialog:
+            MockDialog.return_value.exec.return_value = 0  # Rejected
+            view._delete_card()
+            MockDialog.assert_called_once()
+
+    def test_delete_with_transactions_shows_dialog(self, qtbot, temp_db, sample_card, mock_qmessagebox):
+        """Card with transactions should show CardDeletionDialog"""
+        from budget_app.views.credit_cards_view import CreditCardsView
+        from budget_app.models.transaction import Transaction
+
+        # Remove auto-created linked charge so we isolate the transactions path
+        self._unlink_auto_charges(sample_card.id)
+
+        # Create a transaction with the card's pay_type_code
+        Transaction(id=None, date='2026-02-01', description='Test',
+                    amount=-50, payment_method=sample_card.pay_type_code,
+                    is_posted=False).save()
+
+        view = CreditCardsView()
+        qtbot.addWidget(view)
+        view.table.selectRow(0)
+
+        from unittest.mock import patch
+        with patch('budget_app.views.credit_cards_view.CardDeletionDialog') as MockDialog:
+            MockDialog.return_value.exec.return_value = 0  # Rejected
+            view._delete_card()
+            MockDialog.assert_called_once()
+
+
+class TestCreditCardsViewNotify:
+    """Tests for _notify_recurring_changes"""
+
+    def test_notify_no_parent(self, qtbot, temp_db):
+        """With no parent, should not crash"""
+        from budget_app.views.credit_cards_view import CreditCardsView
+
+        view = CreditCardsView()
+        qtbot.addWidget(view)
+        view._notify_recurring_changes()  # Should not crash
+
+    def test_notify_finds_recurring_view(self, qtbot, temp_db):
+        """When parent has recurring_view, it should call mark_dirty()"""
+        from budget_app.views.credit_cards_view import CreditCardsView
+        from PyQt6.QtWidgets import QWidget
+        from unittest.mock import MagicMock
+
+        # Create a fake parent that has a recurring_view attribute
+        parent = QWidget()
+        parent.recurring_view = MagicMock()
+        qtbot.addWidget(parent)
+
+        view = CreditCardsView()
+        view.setParent(parent)
+
+        view._notify_recurring_changes()
+        parent.recurring_view.mark_dirty.assert_called_once()
+
+
+class TestCreditCardsViewAdd:
+    """Tests for _add_card with mocked dialog"""
+
+    def test_add_card_dialog_accepted(self, qtbot, temp_db):
+        """When dialog returns accepted, card is saved and table refreshes"""
+        from budget_app.views.credit_cards_view import CreditCardsView
+        from budget_app.models.credit_card import CreditCard
+        from unittest.mock import patch
+        from PyQt6.QtWidgets import QDialog
+
+        view = CreditCardsView()
+        qtbot.addWidget(view)
+        assert view.table.rowCount() == 0
+
+        mock_card = CreditCard(id=None, pay_type_code='TS', name='Test Card',
+                               credit_limit=5000, current_balance=0,
+                               interest_rate=0.18, due_day=10)
+
+        with patch('budget_app.views.credit_cards_view.CreditCardDialog') as MockDialog:
+            MockDialog.return_value.exec.return_value = QDialog.DialogCode.Accepted
+            MockDialog.return_value.get_card.return_value = mock_card
+            view._add_card()
+
+        assert view.table.rowCount() == 1
+
+    def test_add_card_dialog_cancelled(self, qtbot, temp_db):
+        """When dialog is cancelled, no card is added"""
+        from budget_app.views.credit_cards_view import CreditCardsView
+        from unittest.mock import patch
+        from PyQt6.QtWidgets import QDialog
+
+        view = CreditCardsView()
+        qtbot.addWidget(view)
+
+        with patch('budget_app.views.credit_cards_view.CreditCardDialog') as MockDialog:
+            MockDialog.return_value.exec.return_value = QDialog.DialogCode.Rejected
+            view._add_card()
+
+        assert view.table.rowCount() == 0
+
+
+class TestCreditCardsViewEdit:
+    """Tests for _edit_card with mocked dialog"""
+
+    def test_edit_card_dialog_accepted(self, qtbot, temp_db, sample_card):
+        """When edit dialog returns accepted, card is updated"""
+        from budget_app.views.credit_cards_view import CreditCardsView
+        from budget_app.models.credit_card import CreditCard
+        from unittest.mock import patch
+        from PyQt6.QtWidgets import QDialog
+
+        view = CreditCardsView()
+        qtbot.addWidget(view)
+        view.table.selectRow(0)
+
+        updated_card = CreditCard(id=None, pay_type_code='CH', name='Chase Updated',
+                                  credit_limit=12000, current_balance=2500,
+                                  interest_rate=0.1599, due_day=20)
+
+        with patch('budget_app.views.credit_cards_view.CreditCardDialog') as MockDialog:
+            MockDialog.return_value.exec.return_value = QDialog.DialogCode.Accepted
+            MockDialog.return_value.get_card.return_value = updated_card
+            view._edit_card()
+
+        # Verify the card was updated in the database
+        saved = CreditCard.get_by_id(sample_card.id)
+        assert saved.name == 'Chase Updated'
+        assert saved.credit_limit == 12000
+        assert saved.due_day == 20
+
+    def test_edit_card_dialog_cancelled(self, qtbot, temp_db, sample_card):
+        """When edit dialog is cancelled, card is unchanged"""
+        from budget_app.views.credit_cards_view import CreditCardsView
+        from budget_app.models.credit_card import CreditCard
+        from unittest.mock import patch
+        from PyQt6.QtWidgets import QDialog
+
+        view = CreditCardsView()
+        qtbot.addWidget(view)
+        view.table.selectRow(0)
+
+        with patch('budget_app.views.credit_cards_view.CreditCardDialog') as MockDialog:
+            MockDialog.return_value.exec.return_value = QDialog.DialogCode.Rejected
+            view._edit_card()
+
+        # Card should remain unchanged
+        saved = CreditCard.get_by_id(sample_card.id)
+        assert saved.name == 'Chase Freedom'
+        assert saved.credit_limit == 10000

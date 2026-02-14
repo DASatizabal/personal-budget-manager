@@ -352,3 +352,44 @@ class TestDeductionDialog:
         assert deduction.name == "State Tax"
         assert deduction.amount_type == "PERCENTAGE"
         assert abs(deduction.amount - 0.0575) < 0.00001
+
+
+class TestPaycheckViewConfigDisplay:
+    """Tests for PaycheckView display values with a paycheck config"""
+
+    def test_annual_gross_label_with_config(self, qtbot, sample_paycheck_config):
+        """Annual gross label should show gross_amount * frequency multiplier"""
+        from budget_app.views.paycheck_view import PaycheckView
+        view = PaycheckView()
+        qtbot.addWidget(view)
+        # BIWEEKLY: 3500 * 26 = 91000
+        assert view.annual_gross_label.text() == "$91,000.00"
+
+    def test_annual_net_label_with_config(self, qtbot, sample_paycheck_config):
+        """Annual net label should show net_pay * frequency multiplier"""
+        from budget_app.views.paycheck_view import PaycheckView
+        view = PaycheckView()
+        qtbot.addWidget(view)
+        # Net = 3500 - (3500*0.22 + 250) = 2480
+        # BIWEEKLY: 2480 * 26 = 64480
+        assert view.annual_net_label.text() == "$64,480.00"
+
+    def test_pay_day_label_shows_day_name(self, qtbot, sample_paycheck_config):
+        """Pay day label should display day name for pay_day_of_week=4 (Friday)"""
+        from budget_app.views.paycheck_view import PaycheckView
+        view = PaycheckView()
+        qtbot.addWidget(view)
+        assert view.pay_day_label.text() == "Friday"
+
+    def test_deduction_percentage_display(self, qtbot, sample_paycheck_config):
+        """Percentage deduction should display in the table as '22.0000%'"""
+        from budget_app.views.paycheck_view import PaycheckView
+        view = PaycheckView()
+        qtbot.addWidget(view)
+        # Find the Federal Tax row (PERCENTAGE type) and verify format
+        for row in range(view.table.rowCount()):
+            if view.table.item(row, 0).text() == "Federal Tax":
+                assert view.table.item(row, 2).text() == "22.0000%"
+                break
+        else:
+            pytest.fail("Federal Tax deduction not found in table")

@@ -229,3 +229,25 @@ class TestSharedExpenseDialog:
         # Switch back to half - disabled again
         dialog.half_radio.setChecked(True)
         assert not dialog.custom_spin.isEnabled()
+
+
+class TestSharedExpensesViewActions:
+    def test_edit_no_selection_warns(self, qtbot, temp_db, mock_qmessagebox):
+        from budget_app.views.shared_expenses_view import SharedExpensesView
+        view = SharedExpensesView()
+        qtbot.addWidget(view)
+        view._edit_expense()
+        assert mock_qmessagebox.warning_called
+
+    def test_delete_no_selection_warns(self, qtbot, temp_db, mock_qmessagebox):
+        from budget_app.views.shared_expenses_view import SharedExpensesView
+        view = SharedExpensesView()
+        qtbot.addWidget(view)
+        view._delete_expense()
+        assert mock_qmessagebox.warning_called
+
+    def test_table_populates_with_data(self, qtbot, temp_db, sample_shared_expenses):
+        from budget_app.views.shared_expenses_view import SharedExpensesView
+        view = SharedExpensesView()
+        qtbot.addWidget(view)
+        assert view.table.rowCount() == 2
