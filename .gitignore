@@ -2,6 +2,10 @@
 *.db
 *.db-journal
 
+# Coverage
+.coverage
+htmlcov/
+
 # Python
 __pycache__/
 *.py[cod]
