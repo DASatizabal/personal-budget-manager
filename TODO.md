@@ -122,7 +122,10 @@
 
 ### Parsing Features (Placeholders)
 - [ ] 9.6 Paycheck/paystub parsing (PDF) - **Placeholder tab created**
-- [ ] 9.7 Credit card statement parsing (PDF/CSV upload) - **Placeholder tab created**
+- [x] 9.7 Credit card statement parsing (PDF/CSV upload)
+  - PDF statement import UI in `pdf_import_view.py`
+  - Supports 8 bank/CC formats via `statement_parser.py`
+  - **DONE**: Full implementation with parser and import view
 
 ### Advanced Features
 - [ ] 9.8 Tax estimation feature - **Skipped per user request**
