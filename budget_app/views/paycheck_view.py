@@ -4,13 +4,14 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QPushButton, QDialog, QFormLayout, QLineEdit,
     QComboBox, QHeaderView, QMessageBox, QDateEdit, QLabel,
-    QGroupBox, QGridLayout
+    QGroupBox, QGridLayout, QFileDialog, QCheckBox
 )
 from .widgets import MoneySpinBox, PercentSpinBox
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QFont
 
 from ..models.paycheck import PaycheckConfig, PaycheckDeduction
+from ..utils.statement_parser import parse_statement
 
 
 class PaycheckView(QWidget):
@@ -71,6 +72,10 @@ class PaycheckView(QWidget):
         edit_config_btn = QPushButton("Edit Paycheck Config")
         edit_config_btn.clicked.connect(self._edit_config)
         toolbar.addWidget(edit_config_btn)
+
+        import_paystub_btn = QPushButton("Import from Paystub")
+        import_paystub_btn.clicked.connect(self._import_paystub)
+        toolbar.addWidget(import_paystub_btn)
 
         add_deduction_btn = QPushButton("Add Deduction")
         add_deduction_btn.clicked.connect(self._add_deduction)
@@ -226,6 +231,176 @@ class PaycheckView(QWidget):
                         d.delete()
                         self.refresh()
                     break
+
+    def _import_paystub(self):
+        """Import paycheck config from a paystub PDF"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Select Paystub PDF", "", "PDF Files (*.pdf)"
+        )
+        if not file_path:
+            return
+
+        try:
+            data = parse_statement(file_path)
+        except Exception as e:
+            QMessageBox.critical(self, "Parse Error", f"Failed to parse PDF:\n{e}")
+            return
+
+        if data.statement_type != 'payslip':
+            QMessageBox.warning(
+                self, "Wrong Document Type",
+                "This doesn't appear to be a paystub. "
+                f"Detected type: {data.statement_type or 'unknown'}"
+            )
+            return
+
+        config = PaycheckConfig.get_current()
+        dialog = PaystubImportDialog(self, data, config)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            if not config:
+                config = PaycheckConfig(id=None, gross_amount=0.0)
+                config.save()
+
+            if dialog.update_gross_cb.isChecked():
+                config.gross_amount = data.gross_pay
+                config.save()
+
+            if dialog.replace_deductions_cb.isChecked():
+                # Delete existing deductions
+                for d in config.deductions:
+                    d.delete()
+                # Create new deductions from parsed data
+                for name, amount in data.deductions.items():
+                    deduction = PaycheckDeduction(
+                        id=None,
+                        paycheck_config_id=config.id,
+                        name=name,
+                        amount_type='FIXED',
+                        amount=amount,
+                    )
+                    deduction.save()
+
+            self.refresh()
+
+
+class PaystubImportDialog(QDialog):
+    """Dialog for reviewing and confirming paystub import"""
+
+    def __init__(self, parent, data, config=None):
+        super().__init__(parent)
+        self.data = data
+        self.config = config
+        self.setWindowTitle("Import Paystub")
+        self.setMinimumWidth(550)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+
+        # Pay period info
+        period_group = QGroupBox("Parsed Paystub Summary")
+        period_layout = QGridLayout(period_group)
+
+        period_layout.addWidget(QLabel("Gross Pay:"), 0, 0)
+        gross_label = QLabel(f"${self.data.gross_pay:,.2f}")
+        gross_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        period_layout.addWidget(gross_label, 0, 1)
+
+        period_layout.addWidget(QLabel("Net Pay:"), 0, 2)
+        net_label = QLabel(f"${self.data.net_pay:,.2f}")
+        net_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        net_label.setStyleSheet("color: #4caf50;")
+        period_layout.addWidget(net_label, 0, 3)
+
+        if self.data.pay_period_start and self.data.pay_period_end:
+            period_layout.addWidget(QLabel("Pay Period:"), 1, 0)
+            period_layout.addWidget(
+                QLabel(f"{self.data.pay_period_start} to {self.data.pay_period_end}"), 1, 1, 1, 3
+            )
+
+        layout.addWidget(period_group)
+
+        # Comparison with current config
+        if self.config:
+            compare_group = QGroupBox("Comparison with Current Config")
+            compare_layout = QGridLayout(compare_group)
+
+            compare_layout.addWidget(QLabel(""), 0, 0)
+            current_header = QLabel("Current")
+            current_header.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+            compare_layout.addWidget(current_header, 0, 1)
+            parsed_header = QLabel("Paystub")
+            parsed_header.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+            compare_layout.addWidget(parsed_header, 0, 2)
+            diff_header = QLabel("Difference")
+            diff_header.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+            compare_layout.addWidget(diff_header, 0, 3)
+
+            compare_layout.addWidget(QLabel("Gross:"), 1, 0)
+            compare_layout.addWidget(QLabel(f"${self.config.gross_amount:,.2f}"), 1, 1)
+            compare_layout.addWidget(QLabel(f"${self.data.gross_pay:,.2f}"), 1, 2)
+            gross_diff = self.data.gross_pay - self.config.gross_amount
+            diff_label = QLabel(f"{'+'if gross_diff >= 0 else ''}{gross_diff:,.2f}")
+            if gross_diff != 0:
+                diff_label.setStyleSheet("color: #f44336;" if gross_diff < 0 else "color: #4caf50;")
+            compare_layout.addWidget(diff_label, 1, 3)
+
+            compare_layout.addWidget(QLabel("Net:"), 2, 0)
+            compare_layout.addWidget(QLabel(f"${self.config.net_pay:,.2f}"), 2, 1)
+            compare_layout.addWidget(QLabel(f"${self.data.net_pay:,.2f}"), 2, 2)
+            net_diff = self.data.net_pay - self.config.net_pay
+            net_diff_label = QLabel(f"{'+'if net_diff >= 0 else ''}{net_diff:,.2f}")
+            if net_diff != 0:
+                net_diff_label.setStyleSheet("color: #f44336;" if net_diff < 0 else "color: #4caf50;")
+            compare_layout.addWidget(net_diff_label, 2, 3)
+
+            layout.addWidget(compare_group)
+
+        # Deductions table
+        deductions_group = QGroupBox(f"Deductions ({len(self.data.deductions)} items)")
+        deductions_layout = QVBoxLayout(deductions_group)
+
+        table = QTableWidget()
+        table.setColumnCount(2)
+        table.setHorizontalHeaderLabels(["Name", "Amount"])
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        table.setAlternatingRowColors(True)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
+        items = list(self.data.deductions.items())
+        table.setRowCount(len(items))
+        for row, (name, amount) in enumerate(items):
+            table.setItem(row, 0, QTableWidgetItem(name))
+            table.setItem(row, 1, QTableWidgetItem(f"${amount:,.2f}"))
+
+        deductions_layout.addWidget(table)
+        layout.addWidget(deductions_group, 1)
+
+        # Options checkboxes
+        options_group = QGroupBox("Import Options")
+        options_layout = QVBoxLayout(options_group)
+
+        self.update_gross_cb = QCheckBox("Update gross amount")
+        self.update_gross_cb.setChecked(True)
+        options_layout.addWidget(self.update_gross_cb)
+
+        self.replace_deductions_cb = QCheckBox("Replace all deductions")
+        self.replace_deductions_cb.setChecked(True)
+        options_layout.addWidget(self.replace_deductions_cb)
+
+        layout.addWidget(options_group)
+
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        save_btn = QPushButton("Import")
+        save_btn.clicked.connect(self.accept)
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(save_btn)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
 
 
 class PaycheckConfigDialog(QDialog):

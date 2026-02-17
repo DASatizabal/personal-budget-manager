@@ -121,7 +121,11 @@
   - **DONE**: Full payoff calculator in `budget_app/utils/payoff_calculator.py`
 
 ### Parsing Features (Placeholders)
-- [ ] 9.6 Paycheck/paystub parsing (PDF) - **Placeholder tab created**
+- [x] 9.6 Paycheck/paystub parsing (PDF)
+  - "Import from Paystub" button in PaycheckView toolbar
+  - Parses gross/net pay, deductions from paystub PDFs via `statement_parser.py`
+  - PaystubImportDialog shows comparison with current config, selective import
+  - **DONE**: Full implementation with 29 tests
 - [x] 9.7 Credit card statement parsing (PDF/CSV upload)
   - PDF statement import UI in `pdf_import_view.py`
   - Supports 8 bank/CC formats via `statement_parser.py`
