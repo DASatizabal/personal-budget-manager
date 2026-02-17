@@ -81,7 +81,7 @@
 - [x] 8.5.6 Skip already-posted transactions when regenerating recurring charges
 - [x] 8.5.7 Auto-create recurring charge when adding new credit card
 
-## Phase 9: Advanced Features (Future)
+## Phase 9: Advanced Features [COMPLETED]
 *Nice-to-have, significant effort. Ordered by workflow optimization.*
 
 ### Quick Wins / Foundational
@@ -139,7 +139,15 @@
   - Alerts for expiring promotional periods
   - Calculate potential retroactive interest charges
   - **DONE**: Full implementation with model and view
-- [ ] 9.10 Bank API integration (Plaid/Yodlee) - **Placeholder tab created**
+- [x] 9.10 Bank API integration (Plaid)
+  - Plaid API credentials management via settings panel
+  - Browser-based bank linking via local HTTP server + Plaid Link JS SDK
+  - One-click balance sync across all linked accounts/cards/loans
+  - Auto-mapping heuristic (by mask, name similarity, type)
+  - Balance comparison table with selective "Apply" updates
+  - Recent transaction display from Plaid
+  - Incremental sync with cursor-based pagination
+  - **DONE**: Full implementation with 113 tests
 
 ---
 

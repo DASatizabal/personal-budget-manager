@@ -1,175 +1,131 @@
 # Personal Budget Manager - Status
 
-## Goal / Current Milestone
-Replace Excel-based budget tracking with a Python desktop application. Currently: **Phase 8 Complete** - MVP working + all phases through infrastructure complete.
+## Goal
+Replace Excel-based budget tracking with a Python desktop application. **All phases complete — v1.0 ready for use.**
 
 ## What's Done
-- [x] SQLite database schema (accounts, credit cards, loans, recurring charges, transactions, paycheck config, shared expenses)
+
+### Core Application
+- [x] SQLite database schema (accounts, credit cards, loans, recurring charges, transactions, paycheck config, shared expenses, Plaid links)
 - [x] Excel import from existing `Budget v2 Claude.xlsx`
-- [x] PyQt6 desktop UI with dark mode
-- [x] Dashboard with account summaries, credit cards, loans
-- [x] Balance update functionality (bulk and individual editing)
-- [x] Recurring charges management
-- [x] Auto-generation of recurring transactions (12 months ahead)
-- [x] Transaction ledger view with running balances
-- [x] Paycheck configuration with deductions
-- [x] Lisa payment splitting (2 vs 3 paycheck months)
-- [x] Database backup/restore
-- [x] GitHub repository set up
-- [x] **Phase 1 UI Fixes:**
-  - Date display format MM/DD/YYYY
-  - $ sign as label (not inside input fields)
-  - No-scroll spinboxes to prevent accidental value changes
-  - Improved spacing/padding across UI
-  - Transactions tab caching (no reload on tab switch)
-- [x] **Phase 2 Core Features:**
-  - CSV export with table selection and date filtering
-  - Balance recalculation tool (compare stored vs calculated balances)
-  - Input validation on all forms (Transaction, Credit Card, Recurring Charge)
-- [x] **Phase 3 Transactions Enhancements:**
-  - Resizable columns with persistent widths (QSettings)
-  - Column visibility toggles (Owed/Avail columns per card)
-  - Payment type filter dropdown (multi-select)
-  - Summary bar showing Chase balance, total CC available, utilization
-  - Both "Owed" and "Avail" columns for each credit card
-- [x] **Phase 4 Generation Fixes:**
-  - Exclude special day codes (991-999) from regular generation loop
-  - Exclude charges linked to Lisa Payments via shared_expenses
-  - Configurable payday (pay_day_of_week in paycheck config)
-  - Database migration for new column
-- [x] **Phase 5 Credit Card Management:**
-  - Enhanced card deletion workflow with CardDeletionDialog
-  - Prompt to reassign linked charges when deleting card
-  - Option to transfer or delete associated transactions
-- [x] **Phase 6 Dashboard Improvements:**
-  - Column sorting enabled on credit cards and loans tables
-  - 90-day minimum balance alerts (already implemented)
-- [x] **Phase 7 Data Safety & Quality:**
-  - Auto-backup system before destructive operations
-  - Undo functionality (Edit > Undo, Ctrl+Z)
-  - Restore from auto-backup dialog
-  - Confirmation dialogs for bulk operations
-  - Detailed Excel import error handling with warnings
-- [x] **Phase 8 Project Infrastructure:**
-  - Logging system (budget_app/utils/logging_config.py)
-  - Unit tests (25 tests for models and calculations)
-  - pyproject.toml for proper Python packaging
+- [x] PyQt6 desktop UI with dark/light mode toggle (qdarkstyle)
+- [x] 11-tab interface covering all financial workflows
+- [x] 1,013 unit tests across 27 test files
 
-## Session 2026-01-08 Fixes
-- Credit card payments now use minimum payment instead of full balance
-- Transaction sorting: positive amounts (Payday) before negative (charges) on same day
-- Payday generation uses effective_date as anchor for bi-weekly schedule
-- Fixed duplicate transactions: delete ALL future non-posted transactions on regenerate
-- Added "Delete All" button to Transactions toolbar
-- Fixed Lisa-linked charges (Mortgage, Spaceship, etc.) being excluded from generation
-- Fixed shared_expenses linking in database
+### Phase 1: Quick UI Fixes
+- [x] Date display format MM/DD/YYYY (storage stays ISO)
+- [x] $ sign as label (not inside input fields)
+- [x] No-scroll spinboxes to prevent accidental value changes
+- [x] Improved spacing/padding across UI
+- [x] Transactions tab caching (no reload on tab switch)
 
-## Session 2026-01-09 Fixes
-- **Lisa Payment Amount**: Fixed payday counting to start from beginning of each month (not today). January 2026 with 3 paydays now correctly calculates $833.33/payday.
-- **No Duplicate Charges**: Shared expenses (Mortgage, SCCU Loan, Spaceship, Windows) linked to Lisa Payments now skipped in transaction generation.
-- **CC ↔ Recurring Charge Sync**: Credit cards now auto-sync linked recurring charges on save (updates day_of_month to match due_day, sets amount_type to CALCULATED).
-- **Recurring Charges Display**: Now shows actual calculated amounts and due days from linked credit cards.
-- **BJs Fix**: Payment date corrected from day 5 to day 2 (matches credit card due_day).
-- **Auto-create Recurring Charge**: New credit cards now automatically create linked recurring charge for payment tracking.
-- **Missing CC Payments Fixed**: Created recurring charges for MicroCenter, Wyndham, Zales (were missing payment transactions).
+### Phase 2: Core Feature Gaps
+- [x] CSV export with table selection and date filtering
+- [x] Balance recalculation tool
+- [x] Input validation on all forms
 
-## Session 2026-01-09 (Part 2) - Posted Transactions Feature
-- **Checkbox Column**: Added checkmark column to Transactions tab for marking transactions as posted
-- **Balance Updates on Post**: When checking a transaction as posted:
-  - Updates Chase account balance for bank transactions
-  - Updates credit card balance for CC charges
-  - For CC payments from Chase, also reduces the linked card's balance
-- **Posted Date Tracking**: New `posted_date` field records when transaction was marked as posted
-- **Posted Tab**: New tab showing all posted transactions with Due Date, Posted Date, Pay Type, Description, Amount
-- **Clear Posted Button**: Removes posted transactions from Transactions view (moves to Posted tab)
-- **Skip Posted on Generate**: Recurring transaction generation now skips already-posted transactions to prevent duplicates
-- **"Dirty" Pattern**: Dashboard and Posted views use mark_dirty() pattern for efficient lazy refresh
+### Phase 3: Transactions Enhancements
+- [x] Resizable columns with persistent widths (QSettings)
+- [x] Column visibility toggles (Owed/Avail columns per card)
+- [x] Multi-select payment type filter dropdown
+- [x] Summary bar (Chase balance, total CC available, utilization)
 
-## Session 2026-01-13 Updates
-- Added detailed TODO items for Phase 9 future features:
-  - 9.2 Credit Card Payoff Planner (full implementation plan in `.claude/plans/humming-napping-pony.md`)
-  - 9.6 Refresh Recurring Charges tab when Credit Cards tab updated
-  - 9.7 Paycheck/paystub parsing (PDF)
-  - 9.8 Modernize GUI appearance
-  - 9.9 Dashboard "Quick Update" for balances
-  - 9.10 Auto-select monetary input fields on click
+### Phase 4: Recurring Charges & Generation Fixes
+- [x] Exclude special day codes (991-999) from regular generation
+- [x] Exclude charges linked to Lisa Payments
+- [x] Configurable payday (pay_day_of_week)
 
-## Session 2026-01-14 Updates
-- **9.1 Auto-select monetary input fields**: Implemented `MoneySpinBox` and `PercentSpinBox` widgets
-  - Auto-selects all text on click/focus for immediate typing
-  - No scroll wheel changes (prevents accidents)
-  - No spinner arrows (cleaner UI)
-  - Applied to all 6 view files with monetary inputs
-- **9.2 Refresh Recurring Charges on CC update**: Implemented cross-tab notification
-  - Added dirty flag pattern to RecurringChargesView
-  - CreditCardsView now marks RecurringChargesView dirty on add/edit/delete
-  - Recurring Charges tab auto-refreshes when switching to it after CC changes
-- **9.3 Dashboard Quick Update**: Enhanced existing UpdateAllBalancesDialog
-  - Renamed button to "Quick Update" with Ctrl+U shortcut
-  - Added scroll area for better usability with many accounts
-- **9.4 Modernize GUI with qdarkstyle**: Applied modern dark theme
-  - Installed qdarkstyle library
-  - Theme toggle (View > Dark Mode) switches between dark/light palettes
-  - Removed 150+ lines of custom CSS
-- **9.5 Credit Card Payoff Planner**: Full implementation with 5 strategies
-  - Avalanche: Highest APR first (mathematically optimal)
-  - Snowball: Lowest balance first (psychological wins)
-  - Hybrid: 60% APR + 40% balance weight
-  - High Utilization: Improves credit score fastest
-  - Cash on Hand: Minimum payments only
-  - Comparison table with payoff dates, total interest, monthly averages
-  - Detailed payment schedule breakdown
-- **9.6/9.7 PDF Import placeholders**: Created placeholder tab for future PDF parsing
-- **9.9 Deferred Interest Tracking**: Full implementation
-  - Track 0% APR promotional purchases
-  - Risk level indicators (Expired, High, Medium, Low)
-  - Alerts for expiring promotions
-  - Calculate potential retroactive interest
-- **9.10 Bank API placeholder**: Created placeholder tab for future Plaid/Yodlee integration
+### Phase 5: Credit Card Management
+- [x] Enhanced card deletion with charge reassignment (CardDeletionDialog)
+- [x] Option to transfer or delete associated transactions
 
-## What's Next (Phase 9 - Future/Advanced)
-Most Phase 9 features are now complete. Remaining placeholders for future development:
-1. ~~Tax estimation feature~~ (Skipped per user request)
-2. ~~Credit Card Payoff Planner~~ ✓
-3. ~~Deferred interest purchase tracking~~ ✓
-4. Credit card statement parsing (PDF/CSV) - placeholder created
-5. Bank API integration (Plaid/Yodlee) - placeholder created
-6. ~~Refresh Recurring Charges on CC update~~ ✓
-7. Paycheck/paystub parsing - placeholder created
-8. ~~Modernize GUI appearance~~ ✓
-9. ~~Dashboard Quick Update~~ ✓
-10. ~~Auto-select monetary input fields~~ ✓
+### Phase 6: Dashboard Improvements
+- [x] Column sorting on credit cards and loans tables
+- [x] 90-day minimum balance alerts
+
+### Phase 7: Data Safety & Quality
+- [x] Auto-backup system before destructive operations
+- [x] Undo functionality (Edit > Undo, Ctrl+Z)
+- [x] Confirmation dialogs for bulk operations
+- [x] Detailed Excel import error handling with warnings
+
+### Phase 8: Project Infrastructure
+- [x] Logging system (`logging_config.py`)
+- [x] Unit tests (grew from 25 to 1,013)
+- [x] pyproject.toml for proper Python packaging
+
+### Phase 8.5: Posted Transactions
+- [x] Checkbox column to mark transactions as posted
+- [x] Balance updates on post (Chase and/or linked CC)
+- [x] Posted tab showing transaction history
+- [x] Skip posted transactions when regenerating
+
+### Phase 9: Advanced Features
+- [x] 9.1 MoneySpinBox/PercentSpinBox auto-select widgets
+- [x] 9.2 Cross-tab refresh (CC changes notify Recurring Charges)
+- [x] 9.3 Dashboard "Quick Update" dialog (Ctrl+U)
+- [x] 9.4 Dark mode with qdarkstyle theme
+- [x] 9.5 Credit Card Payoff Planner (5 strategies: Avalanche, Snowball, Hybrid, High Utilization, Cash on Hand)
+- [x] 9.6 Paystub PDF parsing and import
+- [x] 9.7 Credit card statement parsing (8 bank formats)
+- [x] 9.9 Deferred interest purchase tracking
+- [x] 9.10 Plaid API integration (one-click bank balance sync)
 
 ## Current Blockers
 None
 
 ## How to Run
 ```bash
-cd C:\Users\David\CascadeProjects\windsurf-project
-pip install -r requirements.txt
+cd personal-budget-manager
+pip install PyQt6 pandas openpyxl pdfplumber plaid-python qdarkstyle
 python main.py
 ```
-
 First run: Use File > Import from Excel to load data from your Excel workbook.
 
 ## Key Files
 | File | Purpose |
 |------|---------|
 | `main.py` | Application entry point |
-| `budget_app/views/dashboard_view.py` | Main dashboard with balance editing |
-| `budget_app/views/transactions_view.py` | Transaction ledger with recurring generation |
-| `budget_app/views/posted_transactions_view.py` | Posted transactions history view |
-| `budget_app/views/payoff_planner_view.py` | Credit card payoff strategy comparison |
-| `budget_app/views/deferred_interest_view.py` | 0% APR promotional purchase tracking |
-| `budget_app/views/widgets.py` | Custom MoneySpinBox and PercentSpinBox widgets |
-| `budget_app/utils/excel_import.py` | Excel data import |
-| `budget_app/utils/calculations.py` | Running balance & projection calculations |
-| `budget_app/utils/payoff_calculator.py` | Credit card payoff strategy calculations |
+| **Views** | |
+| `budget_app/views/main_window.py` | Main window, tab manager, menu bar |
+| `budget_app/views/dashboard_view.py` | Dashboard with account summaries and balance alerts |
+| `budget_app/views/transactions_view.py` | Transaction ledger with running balances |
+| `budget_app/views/posted_transactions_view.py` | Posted transactions history |
+| `budget_app/views/credit_cards_view.py` | Credit card management |
+| `budget_app/views/payoff_planner_view.py` | 5-strategy payoff comparison |
+| `budget_app/views/deferred_interest_view.py` | 0% APR promotional tracking |
+| `budget_app/views/recurring_charges_view.py` | Recurring expense management |
+| `budget_app/views/paycheck_view.py` | Paycheck config + paystub import |
+| `budget_app/views/shared_expenses_view.py` | Lisa Payments / shared expenses |
+| `budget_app/views/pdf_import_view.py` | PDF statement import |
+| `budget_app/views/bank_api_view.py` | Plaid bank sync |
+| `budget_app/views/widgets.py` | MoneySpinBox, PercentSpinBox |
+| **Models** | |
 | `budget_app/models/database.py` | SQLite schema and connection |
-| `budget_app/models/deferred_interest.py` | Deferred interest purchase model |
+| `budget_app/models/account.py` | Bank accounts |
+| `budget_app/models/credit_card.py` | Credit cards |
+| `budget_app/models/loan.py` | Loans |
+| `budget_app/models/transaction.py` | Transactions (posted/pending) |
+| `budget_app/models/recurring_charge.py` | Recurring charges |
+| `budget_app/models/paycheck.py` | Paycheck config + deductions |
+| `budget_app/models/shared_expense.py` | Shared expenses |
+| `budget_app/models/deferred_interest.py` | Deferred interest purchases |
+| `budget_app/models/plaid_link.py` | Plaid items + account mappings |
+| **Utilities** | |
+| `budget_app/utils/calculations.py` | Running balance & projection calculations |
+| `budget_app/utils/payoff_calculator.py` | Credit card payoff strategies |
+| `budget_app/utils/statement_parser.py` | PDF statement parsing (8 formats) |
+| `budget_app/utils/excel_import.py` | Excel data import |
+| `budget_app/utils/csv_export.py` | CSV export with date filtering |
+| `budget_app/utils/backup.py` | Auto-backup and restore |
+| `budget_app/utils/plaid_client.py` | Plaid API wrapper |
+| `budget_app/utils/plaid_config.py` | Plaid credentials management |
+| `budget_app/utils/plaid_link_server.py` | Local HTTP server for Plaid Link |
+| `budget_app/utils/logging_config.py` | Logging configuration |
 
 ## Open Questions / Assumptions
 - Excel file contains personal financial data and is excluded from git
 - Database file (`budget_data.db`) is excluded from git (recreated on first run)
 - Special day codes: 991=Mortgage, 992=Spaceship, 993=SCCU, 994=Windows, 999=Payday
-- Lisa payments calculated based on 2 vs 3 paycheck months (3rd paycheck = extra payment month)
+- Lisa payments calculated based on 2 vs 3 paycheck months
+- Plaid credentials stored in `plaid_config.json` (gitignored)

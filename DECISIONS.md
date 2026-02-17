@@ -63,3 +63,24 @@ Dashboard and Posted views use a `_data_dirty` flag pattern. Instead of refreshi
 
 ## 2026-01-09: Skip posted transactions on generate
 When generating recurring transactions, build a set of already-posted (recurring_charge_id, date) pairs and skip any matches. For non-recurring transactions (Payday, Lisa Payment, Interest), check (description, date) pairs. Prevents duplicates when regenerating after posting some transactions.
+
+## 2026-01-14: MoneySpinBox and PercentSpinBox replace NoScrollSpinBox
+Created purpose-built widgets that auto-select all text on click/focus, hide spinner arrows, and block scroll-wheel changes. Replaced all `NoScrollDoubleSpinBox` usage across 6 view files. Simpler UX: user clicks and types immediately.
+
+## 2026-01-14: qdarkstyle theme over custom CSS
+Adopted the `qdarkstyle` library for dark mode instead of maintaining 150+ lines of custom CSS. Provides a consistent, professional appearance. Light mode toggle available via View menu.
+
+## 2026-01-14: Five-strategy payoff planner
+Implemented five credit card payoff strategies (Avalanche, Snowball, Hybrid, High Utilization, Cash on Hand) rather than a single "optimal" approach. Each strategy optimizes for a different user goal (minimize interest, psychological wins, credit score, liquidity). Comparison table lets user see trade-offs at a glance.
+
+## 2026-02-17: Statement parser supports 8 bank/CC formats
+Built a single `parse_statement()` entry point in `statement_parser.py` that auto-detects the institution from PDF text and routes to format-specific parsers. Supports credit card statements, checking account statements, and payslips. Returns a unified `StatementData` dataclass regardless of source format.
+
+## 2026-02-17: Plaid Link via local HTTP server
+Rather than embedding a WebView, Plaid Link runs in the user's default browser via a temporary local HTTP server (`plaid_link_server.py`). The server auto-finds a free port, serves a dark-themed HTML page with the Plaid Link JS SDK, and captures the callback. This avoids Qt WebEngine dependencies and works with any browser.
+
+## 2026-02-17: Plaid account auto-mapping heuristic
+When linking a new institution, accounts are auto-mapped to local accounts/cards/loans using a three-step heuristic: (1) match by last-4 digits, (2) match by name substring similarity, (3) if only one candidate of the matching type exists, use it. User can override via AccountMappingDialog.
+
+## 2026-02-17: Paystub import as selective update
+When importing a paystub PDF, the user gets checkboxes for "Update gross amount" and "Replace all deductions" rather than an all-or-nothing import. This lets users selectively update their paycheck config — e.g., update deductions from a new paystub without overwriting a manually-tweaked gross amount.
