@@ -227,8 +227,15 @@ def mock_qmessagebox(monkeypatch):
         tracker.info_title = title
         tracker.info_text = text
 
+    def mock_critical(parent, title, text, buttons=None, **kwargs):
+        tracker.critical_called = True
+        tracker.critical_title = title
+        tracker.critical_text = text
+        return tracker.last_return
+
     monkeypatch.setattr(QMessageBox, 'warning', staticmethod(mock_warning))
     monkeypatch.setattr(QMessageBox, 'question', staticmethod(mock_question))
     monkeypatch.setattr(QMessageBox, 'information', staticmethod(mock_information))
+    monkeypatch.setattr(QMessageBox, 'critical', staticmethod(mock_critical))
 
     return tracker

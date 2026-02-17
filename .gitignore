@@ -58,6 +58,9 @@ auto_backups/
 Statement Files/
 Statement Files.zip
 
+# Plaid API credentials
+plaid_config.json
+
 # Claude settings
 .claude/
 tmpclaude-*

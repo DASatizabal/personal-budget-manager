@@ -183,11 +183,47 @@ def init_db():
         )
     """)
 
+    # Plaid Items table (one per linked institution)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS plaid_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id TEXT NOT NULL UNIQUE,
+            access_token TEXT NOT NULL,
+            institution_name TEXT,
+            institution_id TEXT,
+            status TEXT NOT NULL DEFAULT 'good',
+            consent_expiration TEXT,
+            transaction_cursor TEXT,
+            created_at TEXT NOT NULL,
+            last_sync TEXT
+        )
+    """)
+
+    # Plaid Account Mappings table (maps Plaid accounts to local accounts/cards/loans)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS plaid_account_mappings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            plaid_item_id INTEGER NOT NULL,
+            plaid_account_id TEXT NOT NULL,
+            plaid_account_name TEXT,
+            plaid_account_official_name TEXT,
+            plaid_account_type TEXT,
+            plaid_account_subtype TEXT,
+            plaid_account_mask TEXT,
+            local_type TEXT CHECK(local_type IN ('account', 'credit_card', 'loan')),
+            local_id INTEGER,
+            is_synced INTEGER NOT NULL DEFAULT 1,
+            FOREIGN KEY (plaid_item_id) REFERENCES plaid_items(id) ON DELETE CASCADE
+        )
+    """)
+
     # Create indexes for performance
     db.execute("CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_transactions_payment_method ON transactions(payment_method)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_recurring_day ON recurring_charges(day_of_month)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_deferred_promo_end ON deferred_purchases(promo_end_date)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_plaid_mappings_item ON plaid_account_mappings(plaid_item_id)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_plaid_mappings_local ON plaid_account_mappings(local_type, local_id)")
 
     # Migration: Add pay_day_of_week column if not exists (default Friday = 4)
     try:
