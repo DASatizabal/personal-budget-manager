@@ -268,7 +268,7 @@ class TestGeneratePaydayTransactions:
 
         config = PaycheckConfig(
             id=None, gross_amount=5000.0, pay_frequency='BIWEEKLY',
-            effective_date='2025-01-01', is_current=True
+            effective_date='2025-01-03', is_current=True  # Jan 3 2025 = Friday
         )
         config.save()
 
@@ -289,7 +289,7 @@ class TestGeneratePaydayTransactions:
         assert len(paydays) >= 2  # At least 2 paydays in a month
         # Net = 5000 - 1000 = 4000
         assert all(t.amount == 4000.0 for t in paydays)
-        # All should be on Fridays
+        # All should be on Fridays (anchored from effective_date which is a Friday)
         assert all(t.date_obj.weekday() == 4 for t in paydays)
 
     def test_generates_lisa_payments(self, temp_db):
@@ -298,7 +298,7 @@ class TestGeneratePaydayTransactions:
 
         config = PaycheckConfig(
             id=None, gross_amount=5000.0, pay_frequency='BIWEEKLY',
-            effective_date='2025-01-01', is_current=True
+            effective_date='2025-01-03', is_current=True
         )
         config.save()
         config = PaycheckConfig.get_by_id(config.id)
@@ -323,7 +323,7 @@ class TestGeneratePaydayTransactions:
 
         config = PaycheckConfig(
             id=None, gross_amount=5000.0, pay_frequency='BIWEEKLY',
-            effective_date='2025-01-01', is_current=True
+            effective_date='2025-01-03', is_current=True
         )
         config.save()
         config = PaycheckConfig.get_by_id(config.id)
@@ -347,7 +347,7 @@ class TestGeneratePaydayTransactions:
 
         config = PaycheckConfig(
             id=None, gross_amount=5000.0, pay_frequency='BIWEEKLY',
-            effective_date='2025-01-01', is_current=True
+            effective_date='2025-01-03', is_current=True
         )
         config.save()
         config = PaycheckConfig.get_by_id(config.id)
@@ -372,7 +372,7 @@ class TestGeneratePaydayTransactions:
 
         config = PaycheckConfig(
             id=None, gross_amount=5000.0, pay_frequency='BIWEEKLY',
-            effective_date='2025-01-01', is_current=True
+            effective_date='2025-01-03', is_current=True
         )
         config.save()
         config = PaycheckConfig.get_by_id(config.id)
@@ -652,7 +652,7 @@ class TestGenerateFutureTransactionsIntegration:
 
         config = PaycheckConfig(
             id=None, gross_amount=5000.0, pay_frequency='BIWEEKLY',
-            effective_date='2025-01-01', is_current=True
+            effective_date='2025-01-03', is_current=True
         )
         config.save()
 

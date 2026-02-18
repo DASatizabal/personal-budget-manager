@@ -350,14 +350,23 @@ def _generate_payday_transactions(start_date: date, end_date: date,
         posted_other = set()
 
     if paycheck.pay_frequency == 'BIWEEKLY':
-        # To correctly count paydays per month, we need to start from the
-        # beginning of the start_date's month, not from start_date itself
-        month_start = date(start_date.year, start_date.month, 1)
+        # Use effective_date as the anchor for the biweekly schedule.
+        # This is a known real payday — we step forward/backward by 14 days.
+        if paycheck.effective_date:
+            anchor = date.fromisoformat(paycheck.effective_date)
+        else:
+            # Fallback: find the first pay-day-of-week on or after start_date
+            anchor = start_date
+            pay_dow = paycheck.pay_day_of_week  # 0=Mon, 4=Fri
+            days_ahead = (pay_dow - anchor.weekday()) % 7
+            anchor += timedelta(days=days_ahead)
 
-        # Find the first Friday on or after the 1st of the month
-        current = month_start
-        days_until_friday = (4 - current.weekday()) % 7
-        current += timedelta(days=days_until_friday)
+        # Walk backward from anchor to cover the start of start_date's month
+        # (needed for accurate payday-per-month counting)
+        month_start = date(start_date.year, start_date.month, 1)
+        current = anchor
+        while current - timedelta(days=14) >= month_start:
+            current -= timedelta(days=14)
 
         # Collect ALL paydays (from month start to end_date) for counting
         all_paydays = []
