@@ -47,11 +47,12 @@ def get_environment_host(environment: Optional[str] = None) -> str:
     """Map environment name to Plaid API host string.
 
     Returns the host string expected by plaid-python's Configuration.
+    Note: Plaid deprecated 'development' — only sandbox and production exist.
     """
+    import plaid
     env = (environment or load_config().get("environment", "sandbox")).lower()
     hosts = {
-        "sandbox": "https://sandbox.plaid.com",
-        "development": "https://development.plaid.com",
-        "production": "https://production.plaid.com",
+        "sandbox": plaid.Environment.Sandbox,
+        "production": plaid.Environment.Production,
     }
-    return hosts.get(env, hosts["sandbox"])
+    return hosts.get(env, plaid.Environment.Sandbox)

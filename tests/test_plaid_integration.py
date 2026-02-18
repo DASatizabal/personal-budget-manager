@@ -153,9 +153,10 @@ class TestPlaidConfig:
         from budget_app.utils.plaid_config import get_environment_host
         assert get_environment_host("sandbox") == "https://sandbox.plaid.com"
 
-    def test_get_environment_host_development(self, temp_config):
+    def test_get_environment_host_development_falls_back_to_sandbox(self, temp_config):
         from budget_app.utils.plaid_config import get_environment_host
-        assert get_environment_host("development") == "https://development.plaid.com"
+        # Development was deprecated by Plaid; falls back to sandbox
+        assert get_environment_host("development") == "https://sandbox.plaid.com"
 
     def test_get_environment_host_production(self, temp_config):
         from budget_app.utils.plaid_config import get_environment_host
@@ -886,13 +887,13 @@ class TestBankAPIView:
 
         view._client_id_edit.setText("test-cid")
         view._secret_edit.setText("test-sec")
-        view._env_combo.setCurrentText("development")
+        view._env_combo.setCurrentText("production")
         view._save_settings()
 
         cfg = load_config()
         assert cfg["client_id"] == "test-cid"
         assert cfg["secret"] == "test-sec"
-        assert cfg["environment"] == "development"
+        assert cfg["environment"] == "production"
 
     def test_load_settings_populates_ui(self, qtbot, temp_db, temp_config):
         from budget_app.utils.plaid_config import save_config

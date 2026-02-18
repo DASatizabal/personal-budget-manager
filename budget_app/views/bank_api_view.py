@@ -207,7 +207,7 @@ class BankAPIView(QWidget):
         settings_layout.addRow("Secret:", self._secret_edit)
 
         self._env_combo = QComboBox()
-        self._env_combo.addItems(["sandbox", "development", "production"])
+        self._env_combo.addItems(["sandbox", "production"])
         settings_layout.addRow("Environment:", self._env_combo)
 
         save_settings_btn = QPushButton("Save Settings")
@@ -314,6 +314,8 @@ class BankAPIView(QWidget):
         self._client_id_edit.setText(cfg.get("client_id", ""))
         self._secret_edit.setText(cfg.get("secret", ""))
         env = cfg.get("environment", "sandbox")
+        if env == "development":
+            env = "sandbox"  # Plaid deprecated development environment
         idx = self._env_combo.findText(env)
         if idx >= 0:
             self._env_combo.setCurrentIndex(idx)
@@ -422,7 +424,7 @@ class BankAPIView(QWidget):
                         "This institution is not available in the current Plaid environment.\n\n"
                         "If you're using Sandbox mode, search for test banks like "
                         "\"First Platypus Bank\" (credentials: user_good / pass_good).\n\n"
-                        "To link real banks, switch to Development or Production "
+                        "To link real banks, switch to Production "
                         "in the Bank API settings."
                     )
                 msg = f"{display}\n\n[{code}]" if code else display or str(err)
