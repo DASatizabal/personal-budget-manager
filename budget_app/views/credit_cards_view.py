@@ -66,10 +66,10 @@ class CreditCardsView(QWidget):
 
         # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(9)
+        self.table.setColumnCount(10)
         self.table.setHorizontalHeaderLabels([
             "Code", "Name", "Balance", "Limit", "Available",
-            "Utilization", "Min Payment", "Interest Rate", "Due Day"
+            "Utilization", "Min Payment", "Interest Rate", "Due Day", "Login Website"
         ])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setAlternatingRowColors(True)
@@ -126,6 +126,7 @@ class CreditCardsView(QWidget):
             self.table.setItem(row, 7, NumericSortItem(f"{card.interest_rate * 100:.2f}%", card.interest_rate))
             due_day_val = card.due_day if card.due_day is not None else 99
             self.table.setItem(row, 8, NumericSortItem(str(card.due_day or "-"), due_day_val))
+            self.table.setItem(row, 9, QTableWidgetItem(card.login_url or ""))
 
         self.table.setSortingEnabled(True)
 
@@ -339,6 +340,10 @@ class CreditCardDialog(QDialog):
         self.due_day_spin.setRange(1, 31)
         layout.addRow("Due Day:", self.due_day_spin)
 
+        self.login_url_edit = QLineEdit()
+        self.login_url_edit.setPlaceholderText("https://www.chase.com/login")
+        layout.addRow("Login Website:", self.login_url_edit)
+
         self.min_type_combo = QComboBox()
         self.min_type_combo.addItems(["Calculated", "Fixed Amount", "Full Balance"])
         self.min_type_combo.currentIndexChanged.connect(self._on_min_type_changed)
@@ -402,6 +407,7 @@ class CreditCardDialog(QDialog):
         self.balance_spin.setValue(self.card.current_balance)
         self.rate_spin.setValue(self.card.interest_rate * 100)
         self.due_day_spin.setValue(self.card.due_day or 1)
+        self.login_url_edit.setText(self.card.login_url or "")
 
         type_map = {'CALCULATED': 0, 'FIXED': 1, 'FULL_BALANCE': 2}
         self.min_type_combo.setCurrentIndex(type_map.get(self.card.min_payment_type, 0))
@@ -414,6 +420,7 @@ class CreditCardDialog(QDialog):
         type_map = {0: 'CALCULATED', 1: 'FIXED', 2: 'FULL_BALANCE'}
         min_type = type_map[self.min_type_combo.currentIndex()]
 
+        login_url = self.login_url_edit.text().strip() or None
         return CreditCard(
             id=None,
             pay_type_code=self.code_edit.text().strip().upper(),
@@ -423,7 +430,8 @@ class CreditCardDialog(QDialog):
             interest_rate=self.rate_spin.value() / 100,
             due_day=self.due_day_spin.value(),
             min_payment_type=min_type,
-            min_payment_amount=self.min_amount_spin.value() if min_type == 'FIXED' else None
+            min_payment_amount=self.min_amount_spin.value() if min_type == 'FIXED' else None,
+            login_url=login_url
         )
 
 

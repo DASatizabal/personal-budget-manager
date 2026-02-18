@@ -17,6 +17,7 @@ class CreditCard:
     min_payment_type: str = 'CALCULATED'
     min_payment_amount: Optional[float] = None
     sort_order: int = 0
+    login_url: Optional[str] = None
 
     @property
     def available_credit(self) -> float:
@@ -53,22 +54,22 @@ class CreditCard:
             cursor = db.execute("""
                 INSERT INTO credit_cards
                 (pay_type_code, name, credit_limit, current_balance, interest_rate,
-                 due_day, min_payment_type, min_payment_amount, sort_order)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 due_day, min_payment_type, min_payment_amount, sort_order, login_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (self.pay_type_code, self.name, self.credit_limit, self.current_balance,
                   self.interest_rate, self.due_day, self.min_payment_type, self.min_payment_amount,
-                  self.sort_order))
+                  self.sort_order, self.login_url))
             self.id = cursor.lastrowid
         else:
             db.execute("""
                 UPDATE credit_cards SET
                 pay_type_code = ?, name = ?, credit_limit = ?, current_balance = ?,
                 interest_rate = ?, due_day = ?, min_payment_type = ?, min_payment_amount = ?,
-                sort_order = ?
+                sort_order = ?, login_url = ?
                 WHERE id = ?
             """, (self.pay_type_code, self.name, self.credit_limit, self.current_balance,
                   self.interest_rate, self.due_day, self.min_payment_type, self.min_payment_amount,
-                  self.sort_order, self.id))
+                  self.sort_order, self.login_url, self.id))
         db.commit()
 
         # For new cards, create a corresponding recurring charge for payment tracking

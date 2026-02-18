@@ -18,14 +18,15 @@ class TestCreditCardsView:
         from budget_app.views.credit_cards_view import CreditCardsView
         view = CreditCardsView()
         qtbot.addWidget(view)
-        assert view.table.columnCount() == 9
+        assert view.table.columnCount() == 10
 
     def test_table_headers(self, qtbot, temp_db):
         from budget_app.views.credit_cards_view import CreditCardsView
         view = CreditCardsView()
         qtbot.addWidget(view)
         expected = ["Code", "Name", "Balance", "Limit", "Available",
-                    "Utilization", "Min Payment", "Interest Rate", "Due Day"]
+                    "Utilization", "Min Payment", "Interest Rate", "Due Day",
+                    "Login Website"]
         for i, label in enumerate(expected):
             assert view.table.horizontalHeaderItem(i).text() == label
 

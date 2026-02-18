@@ -464,6 +464,12 @@ class UpdateAllBalancesDialog(QDialog):
         scroll.setWidget(scroll_content)
         layout.addWidget(scroll, 1)
 
+        # Launch Browser button
+        launch_btn = QPushButton("Launch Browser — Open All Login Sites")
+        launch_btn.setToolTip("Open Chrome with a tab for each credit card login website")
+        launch_btn.clicked.connect(self._launch_browser)
+        layout.addWidget(launch_btn)
+
         # Buttons
         btn_layout = QHBoxLayout()
         save_btn = QPushButton("Save All")
@@ -515,3 +521,43 @@ class UpdateAllBalancesDialog(QDialog):
 
         QMessageBox.information(self, "Saved", "All balances have been updated!")
         self.accept()
+
+    def _launch_browser(self):
+        """Open Chrome with all credit card login URLs in separate tabs"""
+        import subprocess
+        import webbrowser
+        import os
+
+        cards = CreditCard.get_all()
+        urls = list(dict.fromkeys(card.login_url for card in cards if card.login_url))
+
+        if not urls:
+            QMessageBox.information(
+                self, "No Login URLs",
+                "No credit cards have a login website configured.\n\n"
+                "Edit each card in the Credit Cards tab to add one."
+            )
+            return
+
+        # Try to find Chrome on Windows
+        chrome_paths = [
+            os.path.join(os.environ.get("PROGRAMFILES", ""), "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(os.environ.get("PROGRAMFILES(X86)", ""), "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(os.environ.get("LOCALAPPDATA", ""), "Google", "Chrome", "Application", "chrome.exe"),
+        ]
+
+        chrome_exe = None
+        for path in chrome_paths:
+            if path and os.path.isfile(path):
+                chrome_exe = path
+                break
+
+        if chrome_exe:
+            subprocess.Popen([chrome_exe] + urls)
+        else:
+            QMessageBox.warning(
+                self, "Chrome Not Found",
+                "Could not find Google Chrome. Opening in default browser instead."
+            )
+            for url in urls:
+                webbrowser.open(url)

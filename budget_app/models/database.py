@@ -250,6 +250,13 @@ def init_db():
         for idx, row in enumerate(rows):
             db.execute("UPDATE credit_cards SET sort_order = ? WHERE id = ?", (idx, row['id']))
 
+    # Migration: Add login_url column to credit_cards if not exists
+    try:
+        db.execute("SELECT login_url FROM credit_cards LIMIT 1")
+    except Exception:
+        _logger.info("Running migration: Adding login_url column to credit_cards")
+        db.execute("ALTER TABLE credit_cards ADD COLUMN login_url TEXT")
+
     db.commit()
     _logger.info("Database initialized successfully")
     return db
