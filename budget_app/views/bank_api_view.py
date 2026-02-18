@@ -413,7 +413,22 @@ class BankAPIView(QWidget):
         self._progress.setVisible(False)
 
         if "error" in result:
-            QMessageBox.warning(self, "Link Failed", str(result["error"]))
+            err = result["error"]
+            if isinstance(err, dict):
+                display = err.get("display_message") or err.get("error_message") or ""
+                code = err.get("error_code", "")
+                if code == "INSTITUTION_REGISTRATION_REQUIRED":
+                    display = (
+                        "This institution is not available in the current Plaid environment.\n\n"
+                        "If you're using Sandbox mode, search for test banks like "
+                        "\"First Platypus Bank\" (credentials: user_good / pass_good).\n\n"
+                        "To link real banks, switch to Development or Production "
+                        "in the Bank API settings."
+                    )
+                msg = f"{display}\n\n[{code}]" if code else display or str(err)
+            else:
+                msg = str(err)
+            QMessageBox.warning(self, "Link Failed", msg)
             return
         if result.get("cancelled"):
             return
