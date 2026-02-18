@@ -162,8 +162,10 @@ class TestGenerateFutureTransactions:
         mock_charge.id = 1
         mock_charge.get_actual_amount.return_value = -100.0
 
-        with patch('budget_app.utils.calculations.RecurringCharge') as mock_rc:
+        with patch('budget_app.utils.calculations.RecurringCharge') as mock_rc, \
+             patch('budget_app.utils.calculations.CreditCard') as mock_cc:
             mock_rc.get_all.return_value = [mock_charge]
+            mock_cc.get_all.return_value = []
             with patch('budget_app.utils.calculations.PaycheckConfig') as mock_pc:
                 mock_pc.get_current.return_value = None
 
@@ -182,8 +184,10 @@ class TestGenerateFutureTransactions:
         mock_charge.name = 'Mortgage'
         mock_charge.amount = -1900.0
 
-        with patch('budget_app.utils.calculations.RecurringCharge') as mock_rc:
+        with patch('budget_app.utils.calculations.RecurringCharge') as mock_rc, \
+             patch('budget_app.utils.calculations.CreditCard') as mock_cc:
             mock_rc.get_all.return_value = [mock_charge]
+            mock_cc.get_all.return_value = []
             with patch('budget_app.utils.calculations.PaycheckConfig') as mock_pc:
                 mock_pc.get_current.return_value = None
 

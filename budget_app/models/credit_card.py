@@ -16,6 +16,7 @@ class CreditCard:
     due_day: Optional[int] = None
     min_payment_type: str = 'CALCULATED'
     min_payment_amount: Optional[float] = None
+    sort_order: int = 0
 
     @property
     def available_credit(self) -> float:
@@ -46,23 +47,28 @@ class CreditCard:
         db = Database()
         is_new = self.id is None
         if is_new:
+            # Auto-assign sort_order = max existing + 1
+            result = db.execute("SELECT COALESCE(MAX(sort_order), -1) FROM credit_cards").fetchone()
+            self.sort_order = result[0] + 1
             cursor = db.execute("""
                 INSERT INTO credit_cards
                 (pay_type_code, name, credit_limit, current_balance, interest_rate,
-                 due_day, min_payment_type, min_payment_amount)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 due_day, min_payment_type, min_payment_amount, sort_order)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (self.pay_type_code, self.name, self.credit_limit, self.current_balance,
-                  self.interest_rate, self.due_day, self.min_payment_type, self.min_payment_amount))
+                  self.interest_rate, self.due_day, self.min_payment_type, self.min_payment_amount,
+                  self.sort_order))
             self.id = cursor.lastrowid
         else:
             db.execute("""
                 UPDATE credit_cards SET
                 pay_type_code = ?, name = ?, credit_limit = ?, current_balance = ?,
-                interest_rate = ?, due_day = ?, min_payment_type = ?, min_payment_amount = ?
+                interest_rate = ?, due_day = ?, min_payment_type = ?, min_payment_amount = ?,
+                sort_order = ?
                 WHERE id = ?
             """, (self.pay_type_code, self.name, self.credit_limit, self.current_balance,
                   self.interest_rate, self.due_day, self.min_payment_type, self.min_payment_amount,
-                  self.id))
+                  self.sort_order, self.id))
         db.commit()
 
         # For new cards, create a corresponding recurring charge for payment tracking
@@ -150,7 +156,7 @@ class CreditCard:
     @classmethod
     def get_all(cls) -> List['CreditCard']:
         db = Database()
-        rows = db.execute("SELECT * FROM credit_cards ORDER BY name").fetchall()
+        rows = db.execute("SELECT * FROM credit_cards ORDER BY sort_order, name").fetchall()
         return [cls(**dict(row)) for row in rows]
 
     @classmethod
@@ -171,3 +177,11 @@ class CreditCard:
         if total_limit == 0:
             return 0.0
         return cls.get_total_balance() / total_limit
+
+    @classmethod
+    def update_sort_orders(cls, card_ids: list[int]):
+        """Bulk-update sort_order from an ordered list of card IDs"""
+        db = Database()
+        for idx, card_id in enumerate(card_ids):
+            db.execute("UPDATE credit_cards SET sort_order = ? WHERE id = ?", (idx, card_id))
+        db.commit()

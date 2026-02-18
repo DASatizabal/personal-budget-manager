@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QDialog, QFormLayout, QMessageBox, QLineEdit,
     QScrollArea
 )
-from .widgets import MoneySpinBox
+from .widgets import MoneySpinBox, NumericSortItem
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QColor
 from datetime import datetime, timedelta
@@ -258,6 +258,7 @@ class DashboardView(QWidget):
 
     def _update_credit_cards(self):
         """Update credit cards table"""
+        self.cards_table.setSortingEnabled(False)
         cards = CreditCard.get_all()
         self.cards_table.setRowCount(len(cards))
 
@@ -266,12 +267,12 @@ class DashboardView(QWidget):
             name_item.setData(Qt.ItemDataRole.UserRole, card.id)
             self.cards_table.setItem(row, 0, name_item)
 
-            self.cards_table.setItem(row, 1, QTableWidgetItem(f"${card.current_balance:,.2f}"))
-            self.cards_table.setItem(row, 2, QTableWidgetItem(f"${card.credit_limit:,.2f}"))
-            self.cards_table.setItem(row, 3, QTableWidgetItem(f"${card.available_credit:,.2f}"))
+            self.cards_table.setItem(row, 1, NumericSortItem(f"${card.current_balance:,.2f}", card.current_balance))
+            self.cards_table.setItem(row, 2, NumericSortItem(f"${card.credit_limit:,.2f}", card.credit_limit))
+            self.cards_table.setItem(row, 3, NumericSortItem(f"${card.available_credit:,.2f}", card.available_credit))
 
             util_pct = card.utilization * 100
-            util_item = QTableWidgetItem(f"{util_pct:.1f}%")
+            util_item = NumericSortItem(f"{util_pct:.1f}%", util_pct)
             if util_pct > 80:
                 util_item.setForeground(QColor("#f44336"))
             elif util_pct > 50:
@@ -282,12 +283,16 @@ class DashboardView(QWidget):
                 util_item.setForeground(QColor("#4caf50"))
             self.cards_table.setItem(row, 4, util_item)
 
-            self.cards_table.setItem(row, 5, QTableWidgetItem(f"${card.min_payment:,.2f}"))
-            self.cards_table.setItem(row, 6, QTableWidgetItem(f"{card.interest_rate * 100:.2f}%"))
-            self.cards_table.setItem(row, 7, QTableWidgetItem(str(card.due_day or "-")))
+            self.cards_table.setItem(row, 5, NumericSortItem(f"${card.min_payment:,.2f}", card.min_payment))
+            self.cards_table.setItem(row, 6, NumericSortItem(f"{card.interest_rate * 100:.2f}%", card.interest_rate))
+            due_day_val = card.due_day if card.due_day is not None else 99
+            self.cards_table.setItem(row, 7, NumericSortItem(str(card.due_day or "-"), due_day_val))
+
+        self.cards_table.setSortingEnabled(True)
 
     def _update_loans(self):
         """Update loans table"""
+        self.loans_table.setSortingEnabled(False)
         loans = Loan.get_all()
         self.loans_table.setRowCount(len(loans))
 
@@ -296,10 +301,12 @@ class DashboardView(QWidget):
             name_item.setData(Qt.ItemDataRole.UserRole, loan.id)
             self.loans_table.setItem(row, 0, name_item)
 
-            self.loans_table.setItem(row, 1, QTableWidgetItem(f"${loan.current_balance:,.2f}"))
-            self.loans_table.setItem(row, 2, QTableWidgetItem(f"${loan.original_amount:,.2f}"))
-            self.loans_table.setItem(row, 3, QTableWidgetItem(f"${loan.payment_amount:,.2f}"))
-            self.loans_table.setItem(row, 4, QTableWidgetItem(f"{loan.interest_rate * 100:.2f}%"))
+            self.loans_table.setItem(row, 1, NumericSortItem(f"${loan.current_balance:,.2f}", loan.current_balance))
+            self.loans_table.setItem(row, 2, NumericSortItem(f"${loan.original_amount:,.2f}", loan.original_amount))
+            self.loans_table.setItem(row, 3, NumericSortItem(f"${loan.payment_amount:,.2f}", loan.payment_amount))
+            self.loans_table.setItem(row, 4, NumericSortItem(f"{loan.interest_rate * 100:.2f}%", loan.interest_rate))
+
+        self.loans_table.setSortingEnabled(True)
 
     def _update_utilization(self):
         """Update credit utilization display"""

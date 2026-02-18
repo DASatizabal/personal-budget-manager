@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QDialog, QFormLayout, QLineEdit,
     QComboBox, QHeaderView, QMessageBox, QLabel
 )
-from .widgets import NoScrollSpinBox, MoneySpinBox, PercentSpinBox
+from .widgets import NoScrollSpinBox, MoneySpinBox, PercentSpinBox, NumericSortItem
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 
@@ -43,6 +43,21 @@ class CreditCardsView(QWidget):
 
         toolbar.addStretch()
 
+        move_up_btn = QPushButton("Move Up")
+        move_up_btn.clicked.connect(self._move_up)
+        toolbar.addWidget(move_up_btn)
+
+        move_down_btn = QPushButton("Move Down")
+        move_down_btn.clicked.connect(self._move_down)
+        toolbar.addWidget(move_down_btn)
+
+        reset_order_btn = QPushButton("Reset Order")
+        reset_order_btn.setToolTip("Restore persisted sort order (clear column sort)")
+        reset_order_btn.clicked.connect(self._reset_order)
+        toolbar.addWidget(reset_order_btn)
+
+        toolbar.addStretch()
+
         refresh_btn = QPushButton("Refresh")
         refresh_btn.clicked.connect(self.refresh)
         toolbar.addWidget(refresh_btn)
@@ -60,6 +75,7 @@ class CreditCardsView(QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setSortingEnabled(True)
         self.table.doubleClicked.connect(self._edit_card)
         layout.addWidget(self.table)
 
@@ -76,39 +92,42 @@ class CreditCardsView(QWidget):
 
     def refresh(self):
         """Refresh the table data"""
+        self.table.setSortingEnabled(False)
         cards = CreditCard.get_all()
         self.table.setRowCount(len(cards))
 
         for row, card in enumerate(cards):
-            self.table.setItem(row, 0, QTableWidgetItem(card.pay_type_code))
+            code_item = QTableWidgetItem(card.pay_type_code)
+            code_item.setData(Qt.ItemDataRole.UserRole, card.id)
+            self.table.setItem(row, 0, code_item)
             self.table.setItem(row, 1, QTableWidgetItem(card.name))
 
-            balance_item = QTableWidgetItem(f"${card.current_balance:,.2f}")
+            balance_item = NumericSortItem(f"${card.current_balance:,.2f}", card.current_balance)
             if card.current_balance > card.credit_limit:
                 balance_item.setForeground(QColor("#f44336"))
             self.table.setItem(row, 2, balance_item)
 
-            self.table.setItem(row, 3, QTableWidgetItem(f"${card.credit_limit:,.2f}"))
+            self.table.setItem(row, 3, NumericSortItem(f"${card.credit_limit:,.2f}", card.credit_limit))
 
-            available_item = QTableWidgetItem(f"${card.available_credit:,.2f}")
+            available_item = NumericSortItem(f"${card.available_credit:,.2f}", card.available_credit)
             if card.available_credit < 0:
                 available_item.setForeground(QColor("#f44336"))
             self.table.setItem(row, 4, available_item)
 
             util_pct = card.utilization * 100
-            util_item = QTableWidgetItem(f"{util_pct:.1f}%")
+            util_item = NumericSortItem(f"{util_pct:.1f}%", util_pct)
             if util_pct > 80:
                 util_item.setForeground(QColor("#f44336"))
             elif util_pct > 50:
                 util_item.setForeground(QColor("#ff9800"))
             self.table.setItem(row, 5, util_item)
 
-            self.table.setItem(row, 6, QTableWidgetItem(f"${card.min_payment:,.2f}"))
-            self.table.setItem(row, 7, QTableWidgetItem(f"{card.interest_rate * 100:.2f}%"))
-            self.table.setItem(row, 8, QTableWidgetItem(str(card.due_day or "-")))
+            self.table.setItem(row, 6, NumericSortItem(f"${card.min_payment:,.2f}", card.min_payment))
+            self.table.setItem(row, 7, NumericSortItem(f"{card.interest_rate * 100:.2f}%", card.interest_rate))
+            due_day_val = card.due_day if card.due_day is not None else 99
+            self.table.setItem(row, 8, NumericSortItem(str(card.due_day or "-"), due_day_val))
 
-            # Store the card id in the first column
-            self.table.item(row, 0).setData(Qt.ItemDataRole.UserRole, card.id)
+        self.table.setSortingEnabled(True)
 
         # Update summary
         total_balance = CreditCard.get_total_balance()
@@ -126,6 +145,46 @@ class CreditCardsView(QWidget):
             return None
         row = selected[0].row()
         return self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+
+    def _get_card_ids_in_display_order(self) -> list[int]:
+        """Get card IDs in current table display order"""
+        return [
+            self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+            for row in range(self.table.rowCount())
+        ]
+
+    def _move_up(self):
+        """Move the selected card up one position"""
+        selected = self.table.selectedItems()
+        if not selected:
+            return
+        row = selected[0].row()
+        if row <= 0:
+            return
+        card_ids = self._get_card_ids_in_display_order()
+        card_ids[row], card_ids[row - 1] = card_ids[row - 1], card_ids[row]
+        CreditCard.update_sort_orders(card_ids)
+        self.refresh()
+        self.table.selectRow(row - 1)
+
+    def _move_down(self):
+        """Move the selected card down one position"""
+        selected = self.table.selectedItems()
+        if not selected:
+            return
+        row = selected[0].row()
+        if row >= self.table.rowCount() - 1:
+            return
+        card_ids = self._get_card_ids_in_display_order()
+        card_ids[row], card_ids[row + 1] = card_ids[row + 1], card_ids[row]
+        CreditCard.update_sort_orders(card_ids)
+        self.refresh()
+        self.table.selectRow(row + 1)
+
+    def _reset_order(self):
+        """Restore persisted sort_order (clear any column sort)"""
+        self.table.horizontalHeader().setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
+        self.refresh()
 
     def _notify_recurring_changes(self):
         """Notify parent window that credit cards have changed"""

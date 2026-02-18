@@ -239,6 +239,17 @@ def init_db():
         _logger.info("Running migration: Adding posted_date column to transactions")
         db.execute("ALTER TABLE transactions ADD COLUMN posted_date TEXT")
 
+    # Migration: Add sort_order column to credit_cards if not exists
+    try:
+        db.execute("SELECT sort_order FROM credit_cards LIMIT 1")
+    except Exception:
+        _logger.info("Running migration: Adding sort_order column to credit_cards")
+        db.execute("ALTER TABLE credit_cards ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0")
+        # Backfill existing cards with sequential sort_order based on alphabetical name
+        rows = db.execute("SELECT id FROM credit_cards ORDER BY name").fetchall()
+        for idx, row in enumerate(rows):
+            db.execute("UPDATE credit_cards SET sort_order = ? WHERE id = ?", (idx, row['id']))
+
     db.commit()
     _logger.info("Database initialized successfully")
     return db

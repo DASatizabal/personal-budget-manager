@@ -1,7 +1,28 @@
 """Custom widgets with improved UX"""
 
-from PyQt6.QtWidgets import QDoubleSpinBox, QSpinBox
+from PyQt6.QtWidgets import QDoubleSpinBox, QSpinBox, QTableWidgetItem
 from PyQt6.QtCore import Qt, QTimer
+
+
+class NumericSortItem(QTableWidgetItem):
+    """QTableWidgetItem that sorts by numeric value instead of string.
+
+    Stores a float via UserRole+1 so formatted strings like '$1,234.56'
+    and '45.2%' sort correctly when column headers are clicked.
+    """
+
+    SORT_ROLE = Qt.ItemDataRole.UserRole + 1
+
+    def __init__(self, display_text: str, sort_value: float):
+        super().__init__(display_text)
+        self.setData(self.SORT_ROLE, sort_value)
+
+    def __lt__(self, other: QTableWidgetItem) -> bool:
+        my_val = self.data(self.SORT_ROLE)
+        other_val = other.data(self.SORT_ROLE) if other else None
+        if my_val is not None and other_val is not None:
+            return my_val < other_val
+        return super().__lt__(other)
 
 
 class NoScrollDoubleSpinBox(QDoubleSpinBox):
