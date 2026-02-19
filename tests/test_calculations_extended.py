@@ -417,8 +417,8 @@ class TestGenerateInterestCharges:
 
         interest_trans = [t for t in result if 'Interest' in t.description]
         assert len(interest_trans) >= 1
-        # Interest should be positive (adds to card balance)
-        assert all(t.amount > 0 for t in interest_trans)
+        # Interest should be negative (it's a charge on the card)
+        assert all(t.amount < 0 for t in interest_trans)
         # Should be charged to the card's pay type
         assert all(t.payment_method == 'CH' for t in interest_trans)
 
@@ -525,8 +525,8 @@ class TestGenerateInterestCharges:
         interest_trans = [t for t in result if 'Interest' in t.description]
 
         assert len(interest_trans) == 1
-        # 6000 * (0.24 / 12) = 6000 * 0.02 = 120.0
-        assert interest_trans[0].amount == 120.0
+        # 6000 * (0.24 / 12) = 6000 * 0.02 = 120.0 (negative = charge)
+        assert interest_trans[0].amount == -120.0
 
     def test_skips_posted_interest(self, temp_db):
         """Should skip interest that's already posted"""

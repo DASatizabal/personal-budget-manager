@@ -1337,6 +1337,44 @@ class TestRefreshCCPaymentMap:
                 return
         pytest.fail("Netflix row not found")
 
+    def test_manual_cc_payment_reduces_linked_card_balance(self, qtbot, temp_db, sample_account, sample_card):
+        """A manual CC payment (no recurring_charge_id) with matching description reduces card's Owed"""
+        from budget_app.models.recurring_charge import RecurringCharge
+        from budget_app.models.transaction import Transaction
+
+        # Create a recurring charge linked to sample_card (Chase Freedom)
+        charge = RecurringCharge(
+            id=None, name='Chase Freedom', amount=-200.0,
+            day_of_month=15, payment_method='C',
+            frequency='MONTHLY', amount_type='CALCULATED',
+            linked_card_id=sample_card.id
+        )
+        charge.save()
+
+        # Create a MANUAL payment transaction (no recurring_charge_id) with matching description
+        trans = Transaction(
+            id=None, date='2026-06-15', description='Chase Freedom',
+            amount=-200.0, payment_method='C',
+            recurring_charge_id=None, is_posted=False
+        )
+        trans.save()
+
+        view = self._make_view(qtbot)
+        view.refresh()
+
+        # Find the row and check the card's Owed column
+        for row in range(view.table.rowCount()):
+            desc_item = view.table.item(row, 3)
+            if desc_item and desc_item.text() == 'Chase Freedom':
+                owed_col = view._all_columns.index("Chase Freedom Owed")
+                owed_item = view.table.item(row, owed_col)
+                owed_text = owed_item.text().replace('$', '').replace(',', '')
+                owed_value = float(owed_text)
+                # Card started at 3000, manual payment of -200 should reduce: 3000 + (-200) = 2800
+                assert owed_value == 2800.0
+                return
+        pytest.fail("Chase Freedom payment row not found")
+
 
 class TestRefreshCardColorThresholds:
     """Tests for card Owed/Avail/Utilization color thresholds in refresh()"""

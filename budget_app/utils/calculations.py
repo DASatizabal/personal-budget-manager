@@ -38,6 +38,16 @@ def calculate_running_balances(transactions: List[Transaction],
     # Get all credit cards for calculating available credit
     cards = {c.pay_type_code: c for c in CreditCard.get_all()}
 
+    # Build CC payment maps for linked card balance updates
+    cc_payment_map = {}
+    cc_name_map = {}
+    card_id_to_code = {c.id: c for c in CreditCard.get_all()}
+    for charge in RecurringCharge.get_all():
+        if charge.linked_card_id and charge.linked_card_id in card_id_to_code:
+            code = card_id_to_code[charge.linked_card_id].pay_type_code
+            cc_payment_map[charge.id] = code
+            cc_name_map[charge.name] = code
+
     # Initialize running balances
     running = starting_balances.copy()
 
@@ -51,6 +61,15 @@ def calculate_running_balances(transactions: List[Transaction],
                 running[method] = running[method] - trans.amount  # CC: charges increase owed
             else:
                 running[method] = running[method] + trans.amount
+
+            # If this is a CC payment, also update the linked card's balance
+            linked_card_code = None
+            if trans.recurring_charge_id and trans.recurring_charge_id in cc_payment_map:
+                linked_card_code = cc_payment_map[trans.recurring_charge_id]
+            elif trans.description in cc_name_map:
+                linked_card_code = cc_name_map[trans.description]
+            if linked_card_code and linked_card_code in running:
+                running[linked_card_code] += trans.amount
 
         # Calculate available credit for credit cards
         available = {}
@@ -461,10 +480,12 @@ def _generate_interest_charges(start_date: date, end_date: date,
 
     # Build map of recurring_charge_id -> pay_type_code for CC payments
     cc_payment_map = {}
+    cc_name_map = {}
     card_id_to_code = {c.id: c.pay_type_code for c in CreditCard.get_all()}
     for charge in RecurringCharge.get_all():
         if charge.linked_card_id and charge.linked_card_id in card_id_to_code:
             cc_payment_map[charge.id] = card_id_to_code[charge.linked_card_id]
+            cc_name_map[charge.name] = card_id_to_code[charge.linked_card_id]
 
     # Sort transactions by date for processing
     sorted_trans = sorted(transactions, key=lambda x: x.date)
@@ -509,19 +530,23 @@ def _generate_interest_charges(start_date: date, end_date: date,
                 if trans.date > balance_date_str:
                     break
 
-                # Direct transactions to this card
+                # Direct transactions to this card (charges are negative, increase owed)
                 if trans.payment_method == card.pay_type_code:
-                    card_balance += trans.amount
+                    card_balance -= trans.amount
 
                 # Credit card payments reduce the balance
-                if trans.recurring_charge_id in cc_payment_map:
-                    if cc_payment_map[trans.recurring_charge_id] == card.pay_type_code:
-                        card_balance += trans.amount  # trans.amount is negative
+                linked_code = None
+                if trans.recurring_charge_id and trans.recurring_charge_id in cc_payment_map:
+                    linked_code = cc_payment_map[trans.recurring_charge_id]
+                elif trans.description in cc_name_map:
+                    linked_code = cc_name_map[trans.description]
+                if linked_code == card.pay_type_code:
+                    card_balance += trans.amount  # trans.amount is negative
 
             # Also include any interest charges we've already generated
             for ic in interest_charges:
                 if ic.date <= balance_date_str and ic.payment_method == card.pay_type_code:
-                    card_balance += ic.amount
+                    card_balance -= ic.amount  # interest is negative, increases owed
 
             # Only charge interest if there's a balance owed
             if card_balance > 0:
@@ -537,7 +562,7 @@ def _generate_interest_charges(start_date: date, end_date: date,
                         id=None,
                         date=interest_date_str,
                         description=interest_desc,
-                        amount=interest_amount,
+                        amount=-interest_amount,  # Negative: interest is a charge
                         payment_method=card.pay_type_code,
                         recurring_charge_id=None,
                         is_posted=False

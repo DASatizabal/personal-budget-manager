@@ -692,10 +692,13 @@ class TransactionsView(QWidget):
             # Build cache of recurring charges that are credit card payments
             # Maps recurring_charge_id -> pay_type_code of the linked card
             cc_payment_map = {}
+            # Fallback: maps description -> pay_type_code for manual transactions
+            cc_name_map = {}
             card_id_to_code = {c.id: c.pay_type_code for c in cards}
             for charge in RecurringCharge.get_all():
                 if charge.linked_card_id and charge.linked_card_id in card_id_to_code:
                     cc_payment_map[charge.id] = card_id_to_code[charge.linked_card_id]
+                    cc_name_map[charge.name] = card_id_to_code[charge.linked_card_id]
 
             # Block table signals during population for performance
             self.table.blockSignals(True)
@@ -721,11 +724,15 @@ class TransactionsView(QWidget):
 
                     # If this is a credit card payment, also update the card's balance
                     # The payment reduces the card's debt (amount is negative, so it reduces owed)
-                    if trans.recurring_charge_id in cc_payment_map:
+                    linked_card_code = None
+                    if trans.recurring_charge_id and trans.recurring_charge_id in cc_payment_map:
                         linked_card_code = cc_payment_map[trans.recurring_charge_id]
-                        if linked_card_code in running:
-                            # Payment amount is negative (from Chase), apply as positive reduction to card debt
-                            running[linked_card_code] += trans.amount  # trans.amount is already negative
+                    elif trans.description in cc_name_map:
+                        # Fallback for manual CC payments matching a known charge name
+                        linked_card_code = cc_name_map[trans.description]
+                    if linked_card_code and linked_card_code in running:
+                        # Payment amount is negative (from Chase), reduces card debt
+                        running[linked_card_code] += trans.amount  # trans.amount is already negative
 
                 # Calculate utilization
                 total_balance = sum(running.get(c.pay_type_code, 0) for c in cards)
@@ -849,6 +856,9 @@ class TransactionsView(QWidget):
         finally:
             QApplication.restoreOverrideCursor()
             self.progress_bar.setVisible(False)
+
+            # Reapply real-time filters (description, amount, sign) after table rebuild
+            self._apply_filters()
 
     def _auto_generate_if_needed(self):
         """Auto-generate recurring transactions if none exist"""
