@@ -47,7 +47,10 @@ def calculate_running_balances(transactions: List[Transaction],
 
         # Update the relevant balance
         if method in running:
-            running[method] = running[method] + trans.amount
+            if method in cards:
+                running[method] = running[method] - trans.amount  # CC: charges increase owed
+            else:
+                running[method] = running[method] + trans.amount
 
         # Calculate available credit for credit cards
         available = {}

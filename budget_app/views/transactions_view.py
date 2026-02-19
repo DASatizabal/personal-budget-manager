@@ -680,6 +680,7 @@ class TransactionsView(QWidget):
             # Use self._cards for column mapping (preserves sort order)
             cards = self._cards
             card_codes = [c.pay_type_code for c in cards]
+            card_code_set = set(card_codes)
             card_limits = {c.pay_type_code: c.credit_limit for c in cards}
             self.progress_bar.setValue(30)
             QApplication.processEvents()
@@ -713,7 +714,10 @@ class TransactionsView(QWidget):
                 # Update the relevant balance - only for non-posted transactions
                 # Posted transactions are already reflected in the current balance
                 if method in running and not trans.is_posted:
-                    running[method] += trans.amount
+                    if method in card_code_set:
+                        running[method] -= trans.amount  # CC: charges increase owed, refunds decrease
+                    else:
+                        running[method] += trans.amount  # Bank accounts: normal direction
 
                     # If this is a credit card payment, also update the card's balance
                     # The payment reduces the card's debt (amount is negative, so it reduces owed)

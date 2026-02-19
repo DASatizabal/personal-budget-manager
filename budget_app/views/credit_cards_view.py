@@ -219,6 +219,7 @@ class CreditCardsView(QWidget):
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 updated = dialog.get_card()
                 updated.id = card.id
+                updated.sort_order = card.sort_order
                 updated.save()
                 self._notify_recurring_changes()
                 self.refresh()

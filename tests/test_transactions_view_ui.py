@@ -1309,6 +1309,34 @@ class TestRefreshCCPaymentMap:
                 return
         pytest.fail("CF Payment row not found")
 
+    def test_direct_card_charge_increases_owed(self, qtbot, temp_db, sample_account, sample_card):
+        """A charge made directly on a credit card increases the card's Owed running balance"""
+        from budget_app.models.transaction import Transaction
+
+        # Create a transaction charged directly to Chase Freedom (pay_type_code='CH')
+        trans = Transaction(
+            id=None, date='2026-06-01', description='Netflix',
+            amount=-15.0, payment_method='CH', is_posted=False
+        )
+        trans.save()
+
+        view = self._make_view(qtbot)
+        view.refresh()
+
+        # Find the row for Netflix and check the card's Owed column
+        for row in range(view.table.rowCount()):
+            desc_item = view.table.item(row, 3)
+            if desc_item and desc_item.text() == 'Netflix':
+                # Chase Freedom Owed column
+                owed_col = view._all_columns.index("Chase Freedom Owed")
+                owed_item = view.table.item(row, owed_col)
+                owed_text = owed_item.text().replace('$', '').replace(',', '')
+                owed_value = float(owed_text)
+                # Card started at 3000, charge of -15 should increase owed: 3000 - (-15) = 3015
+                assert owed_value == 3015.0
+                return
+        pytest.fail("Netflix row not found")
+
 
 class TestRefreshCardColorThresholds:
     """Tests for card Owed/Avail/Utilization color thresholds in refresh()"""
