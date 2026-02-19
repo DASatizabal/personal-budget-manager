@@ -124,20 +124,24 @@ class Transaction:
 
     @classmethod
     def delete_future_recurring(cls, from_date: str = None):
-        """Delete all future non-posted transactions for regeneration.
+        """Delete all future non-posted auto-generated transactions for regeneration.
         This includes:
-        - Transactions linked to recurring charges
-        - Payday transactions (recurring_charge_id is NULL but auto-generated)
-        - LDBPD markers
-        - Lisa payment transactions
+        - Transactions linked to recurring charges (recurring_charge_id IS NOT NULL)
+        - Payday transactions, LDBPD markers, Lisa payments (known descriptions)
+        - Interest charges (description ending with ' Interest')
+        Manual transactions (recurring_charge_id IS NULL, unknown description) are preserved.
         """
         if from_date is None:
             from_date = datetime.now().strftime('%Y-%m-%d')
         db = Database()
-        # Delete all future non-posted transactions (they are all auto-generated)
         db.execute("""
             DELETE FROM transactions
             WHERE date >= ? AND is_posted = 0
+              AND (
+                recurring_charge_id IS NOT NULL
+                OR description IN ('Payday', 'LDBPD', 'Lisa')
+                OR description LIKE '% Interest'
+              )
         """, (from_date,))
         db.commit()
 

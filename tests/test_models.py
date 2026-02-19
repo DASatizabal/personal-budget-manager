@@ -656,12 +656,37 @@ class TestTransactionModel:
         assert 'Past' not in descriptions
 
     def test_delete_future_recurring(self, temp_db):
-        """delete_future_recurring should delete future non-posted transactions"""
+        """delete_future_recurring should delete auto-generated but preserve manual transactions"""
         from budget_app.models.transaction import Transaction
+        from budget_app.models.recurring_charge import RecurringCharge
 
-        # Future non-posted (should be deleted)
+        # Create a recurring charge so we can reference it
+        charge = RecurringCharge(
+            id=None, name='Netflix', amount=-15.0,
+            day_of_month=1, payment_method='C',
+            frequency='MONTHLY', amount_type='FIXED'
+        )
+        charge.save()
+
+        # Future recurring (should be deleted)
         Transaction(
-            id=None, date='2099-06-01', description='Future Non-Posted',
+            id=None, date='2099-06-01', description='Netflix',
+            amount=-15.0, payment_method='C', is_posted=False,
+            recurring_charge_id=charge.id
+        ).save()
+        # Future auto-generated payday (should be deleted)
+        Transaction(
+            id=None, date='2099-06-05', description='Payday',
+            amount=2500.0, payment_method='C', is_posted=False
+        ).save()
+        # Future auto-generated interest (should be deleted)
+        Transaction(
+            id=None, date='2099-06-10', description='Chase Interest',
+            amount=-30.0, payment_method='CH', is_posted=False
+        ).save()
+        # Future manual (should remain - no recurring_charge_id, unknown description)
+        Transaction(
+            id=None, date='2099-06-01', description='Future Manual',
             amount=-50.0, payment_method='C', is_posted=False
         ).save()
         # Future posted (should remain)
@@ -680,7 +705,10 @@ class TestTransactionModel:
 
         all_trans = Transaction.get_all()
         descriptions = [t.description for t in all_trans]
-        assert 'Future Non-Posted' not in descriptions
+        assert 'Netflix' not in descriptions
+        assert 'Payday' not in descriptions
+        assert 'Chase Interest' not in descriptions
+        assert 'Future Manual' in descriptions
         assert 'Future Posted' in descriptions
         assert 'Past Non-Posted' in descriptions
 

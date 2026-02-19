@@ -2093,17 +2093,32 @@ class TestDoGenerateRecurring:
         assert "2" in mock_qmessagebox.info_text  # "Generated 2 recurring transactions"
 
     def test_generate_clears_existing(self, qtbot, temp_db, mock_qmessagebox):
-        """With clear_existing=True → deletes future recurring first"""
+        """With clear_existing=True → deletes future recurring but preserves manual"""
         from budget_app.views.transactions_view import TransactionsView
         from budget_app.models.transaction import Transaction
+        from budget_app.models.recurring_charge import RecurringCharge
         from unittest.mock import patch
 
-        # Create an existing future non-posted transaction (no FK)
-        existing = Transaction(
-            id=None, date='2099-01-01', description='Future Existing',
-            amount=-10.0, payment_method='C', is_posted=False
+        # Create a recurring charge to reference
+        charge = RecurringCharge(
+            id=None, name='Netflix', amount=-15.0,
+            day_of_month=1, payment_method='C',
+            frequency='MONTHLY', amount_type='FIXED'
         )
-        existing.save()
+        charge.save()
+
+        # Future recurring transaction (should be deleted)
+        Transaction(
+            id=None, date='2099-01-01', description='Netflix',
+            amount=-15.0, payment_method='C', is_posted=False,
+            recurring_charge_id=charge.id
+        ).save()
+
+        # Future manual transaction (should be preserved)
+        Transaction(
+            id=None, date='2099-01-01', description='Future Manual',
+            amount=-10.0, payment_method='C', is_posted=False
+        ).save()
 
         view = TransactionsView()
         qtbot.addWidget(view)
@@ -2113,9 +2128,10 @@ class TestDoGenerateRecurring:
                    return_value=[]):
             view._do_generate_recurring(months=3, clear_existing=True, show_message=False)
 
-        # The future transaction should be deleted
         remaining = Transaction.get_all()
-        assert all(t.description != 'Future Existing' for t in remaining)
+        descriptions = [t.description for t in remaining]
+        assert 'Netflix' not in descriptions
+        assert 'Future Manual' in descriptions
 
     def test_generate_no_message(self, qtbot, temp_db, mock_qmessagebox):
         """With show_message=False → no QMessageBox shown"""
