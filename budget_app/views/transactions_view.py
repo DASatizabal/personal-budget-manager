@@ -894,14 +894,16 @@ class TransactionsView(QWidget):
         for trans in transactions:
             trans.save()
 
+        # Remove duplicates (date, pay type, description, amount)
+        dupes_removed = Transaction.dedup()
+
         if show_message:
             end_date = today + timedelta(days=months * 30)
-            QMessageBox.information(
-                self,
-                "Generation Complete",
-                f"Generated {len(transactions)} recurring transactions\n"
-                f"From {today} to {end_date}"
-            )
+            msg = (f"Generated {len(transactions)} recurring transactions\n"
+                   f"From {today} to {end_date}")
+            if dupes_removed:
+                msg += f"\n{dupes_removed} duplicate(s) removed"
+            QMessageBox.information(self, "Generation Complete", msg)
 
         self.mark_dirty()
         self.refresh()

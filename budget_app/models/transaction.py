@@ -146,6 +146,24 @@ class Transaction:
         db.commit()
 
     @classmethod
+    def dedup(cls) -> int:
+        """Remove duplicate transactions, keeping the one with the lowest id.
+        Duplicates are identified by (date, payment_method, description, amount).
+        Returns the number of duplicates removed.
+        """
+        db = Database()
+        cursor = db.execute("""
+            DELETE FROM transactions
+            WHERE id NOT IN (
+                SELECT MIN(id)
+                FROM transactions
+                GROUP BY date, payment_method, description, amount
+            )
+        """)
+        db.commit()
+        return cursor.rowcount
+
+    @classmethod
     def get_running_balance(cls, payment_method: str, up_to_date: str,
                            starting_balance: float) -> float:
         """Calculate running balance for a payment method up to a date"""
